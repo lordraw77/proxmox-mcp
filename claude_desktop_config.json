@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "proxmox": {
+      "command": "/opt/proxmox-mcp/.venv/bin/python",
+      "args": ["/opt/proxmox-mcp/server.py"],
+      "env": {}
+    }
+  }
+}
