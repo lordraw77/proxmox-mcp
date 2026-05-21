@@ -12,7 +12,7 @@ Protocol   : MCP 2024-11-05
 Auth       : credentials loaded from .env via python-dotenv
 API backend: proxmoxer (thin Python wrapper over the Proxmox VE REST API)
 
-Tool categories (46 total)
+Tool categories (69 total)
 ---------------------------
   Informational — read-only (11)
     list_nodes, list_vms, list_storage, vm_status, vm_config,
@@ -25,6 +25,9 @@ Tool categories (46 total)
   Clone & provisioning (4)
     vm_clone, vm_create, vm_delete, vm_resize_disk
 
+  Disk management (4)
+    vm_move_disk, vm_unlink_disk, list_node_disks, vm_template
+
   Firewall (5)
     list_firewall_rules, create_firewall_rule, delete_firewall_rule,
     list_firewall_aliases, list_firewall_ipsets
@@ -35,14 +38,33 @@ Tool categories (46 total)
   High Availability (3)
     cluster_status, ha_resources, ha_groups
 
-  Node — OS & system (4)
-    node_apt_updates, node_syslog, node_dns, node_subscription
+  QEMU Guest Agent (3)
+    vm_agent_exec, vm_agent_info, vm_agent_network
+
+  Backup jobs (2)
+    list_backup_jobs, prune_backups
+
+  Replication (3)
+    list_replication, create_replication, delete_replication
+
+  Ceph (4)
+    ceph_status, ceph_health, ceph_osds, ceph_pools
+
+  Node — OS & system (6)
+    node_apt_updates, node_syslog, node_dns, node_subscription,
+    node_reboot, node_shutdown, node_apt_upgrade, node_certificates
 
   Users & access control (4)
     list_users, list_tokens, list_acl, list_pools
 
   Software Defined Networking (2)
     list_vnets, list_sdn_zones
+
+  Notifications (2)
+    list_notification_endpoints, list_notification_matchers
+
+  Console (1)
+    vm_console_url
 
   Reversible lifecycle actions (4)
     vm_start, vm_stop, vm_shutdown, vm_reboot
@@ -716,6 +738,300 @@ async def list_tools() -> list[types.Tool]:
                 "required": [*_REQUIRED_NVT, "target"],
             },
         ),
+
+        # ── Disk management ───────────────────────────────────────────────
+
+        types.Tool(
+            name="vm_move_disk",
+            description=(
+                "Move a VM disk to a different storage pool. "
+                "Optionally delete the source disk after the move completes."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "VM ID (QEMU only)."},
+                    "disk": {"type": "string", "description": "Disk to move, e.g. 'scsi0', 'virtio0'."},
+                    "storage": {"type": "string", "description": "Destination storage pool."},
+                    "delete": {"type": "boolean", "description": "Delete the source disk after move (default false)."},
+                },
+                "required": ["node", "vmid", "disk", "storage"],
+            },
+        ),
+        types.Tool(
+            name="vm_unlink_disk",
+            description=(
+                "Detach one or more disks from a QEMU VM configuration. "
+                "With force=true the disk image is also deleted from storage. "
+                "WARNING: force deletion is irreversible."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "VM ID (QEMU only)."},
+                    "idlist": {"type": "string", "description": "Comma-separated disk names to unlink, e.g. 'scsi0,ide2'."},
+                    "force": {"type": "boolean", "description": "Also delete the disk image from storage (default false)."},
+                },
+                "required": ["node", "vmid", "idlist"],
+            },
+        ),
+        types.Tool(
+            name="list_node_disks",
+            description="List physical disks installed on a Proxmox node with model, size and S.M.A.R.T. health.",
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Proxmox node name."}},
+                "required": ["node"],
+            },
+        ),
+        types.Tool(
+            name="vm_template",
+            description=(
+                "Convert a stopped QEMU VM into a template. "
+                "Templates are read-only and can only be used as clone sources. "
+                "WARNING: this conversion is irreversible."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "VM ID to convert (must be stopped)."},
+                },
+                "required": ["node", "vmid"],
+            },
+        ),
+
+        # ── QEMU Guest Agent ──────────────────────────────────────────────
+
+        types.Tool(
+            name="vm_agent_exec",
+            description=(
+                "Execute a shell command inside a running QEMU VM via the QEMU guest agent. "
+                "Requires qemu-guest-agent to be installed and running in the VM. "
+                "Returns stdout, stderr and exit code."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "VM ID."},
+                    "command": {"type": "string", "description": "Shell command to run inside the VM, e.g. 'uptime'."},
+                },
+                "required": ["node", "vmid", "command"],
+            },
+        ),
+        types.Tool(
+            name="vm_agent_info",
+            description=(
+                "Retrieve OS and guest agent information from inside a running QEMU VM: "
+                "OS name, kernel version, hostname, guest agent version."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "VM ID."},
+                },
+                "required": ["node", "vmid"],
+            },
+        ),
+        types.Tool(
+            name="vm_agent_network",
+            description=(
+                "Retrieve the actual network interface configuration from inside a QEMU VM "
+                "via the guest agent — shows real IPs assigned by the OS, not just the "
+                "Proxmox configuration."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "VM ID."},
+                },
+                "required": ["node", "vmid"],
+            },
+        ),
+
+        # ── Backup jobs ───────────────────────────────────────────────────
+
+        types.Tool(
+            name="list_backup_jobs",
+            description="List all scheduled vzdump backup jobs configured in the cluster.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        types.Tool(
+            name="prune_backups",
+            description=(
+                "Delete old backup archives from a storage pool according to a retention policy. "
+                "Retention parameters follow the Proxmox keep-* conventions. "
+                "Without retention params, performs a dry-run and shows what would be deleted."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "storage": {"type": "string", "description": "Storage pool to prune."},
+                    "vmid": {"type": "integer", "description": "Restrict pruning to a specific VM/CT ID (optional)."},
+                    "keep_last": {"type": "integer", "description": "Number of most recent backups to keep."},
+                    "keep_daily": {"type": "integer", "description": "Number of daily backups to keep."},
+                    "keep_weekly": {"type": "integer", "description": "Number of weekly backups to keep."},
+                    "keep_monthly": {"type": "integer", "description": "Number of monthly backups to keep."},
+                },
+                "required": ["node", "storage"],
+            },
+        ),
+
+        # ── Replication ───────────────────────────────────────────────────
+
+        types.Tool(
+            name="list_replication",
+            description="List all ZFS replication jobs configured in the cluster.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        types.Tool(
+            name="create_replication",
+            description=(
+                "Create a ZFS replication job to continuously replicate a VM or container "
+                "to another node.  The job ID format is '{vmid}-{jobnum}', e.g. '100-0'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Job ID in the format '{vmid}-{jobnum}', e.g. '100-0'."},
+                    "target": {"type": "string", "description": "Destination node for replication."},
+                    "schedule": {"type": "string", "description": "Replication schedule in systemd calendar format, e.g. '*/15' for every 15 minutes (default: '*/15')."},
+                    "comment": {"type": "string", "description": "Optional description for this replication job."},
+                },
+                "required": ["id", "target"],
+            },
+        ),
+        types.Tool(
+            name="delete_replication",
+            description="Delete a ZFS replication job.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Replication job ID (e.g. '100-0')."},
+                    "force": {"type": "boolean", "description": "Force deletion even if the job is currently running."},
+                },
+                "required": ["id"],
+            },
+        ),
+
+        # ── Ceph ──────────────────────────────────────────────────────────
+
+        types.Tool(
+            name="ceph_status",
+            description="Full Ceph cluster status: health, IOPS, throughput, PG states and monitor quorum.",
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Any Proxmox node that runs Ceph."}},
+                "required": ["node"],
+            },
+        ),
+        types.Tool(
+            name="ceph_health",
+            description="Ceph health checks — detailed list of warnings and errors affecting the cluster.",
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Any Proxmox node that runs Ceph."}},
+                "required": ["node"],
+            },
+        ),
+        types.Tool(
+            name="ceph_osds",
+            description="List all Ceph OSD daemons with their status (up/down/in/out), weight and device path.",
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Any Proxmox node that runs Ceph."}},
+                "required": ["node"],
+            },
+        ),
+        types.Tool(
+            name="ceph_pools",
+            description="List Ceph storage pools with size, replication factor and I/O statistics.",
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Any Proxmox node that runs Ceph."}},
+                "required": ["node"],
+            },
+        ),
+
+        # ── Node — OS actions ─────────────────────────────────────────────
+
+        types.Tool(
+            name="node_reboot",
+            description=(
+                "Reboot a Proxmox node. All VMs and containers on the node will be "
+                "stopped (or migrated if HA is configured) before the reboot."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Proxmox node to reboot."}},
+                "required": ["node"],
+            },
+        ),
+        types.Tool(
+            name="node_shutdown",
+            description=(
+                "Shut down a Proxmox node. All VMs and containers on the node will be "
+                "stopped before shutdown."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Proxmox node to shut down."}},
+                "required": ["node"],
+            },
+        ),
+        types.Tool(
+            name="node_apt_upgrade",
+            description=(
+                "Refresh the APT package list on a node and return the list of upgradable packages. "
+                "This is equivalent to running 'apt-get update'. "
+                "To apply upgrades, use the Proxmox web UI or SSH into the node."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Proxmox node name."}},
+                "required": ["node"],
+            },
+        ),
+        types.Tool(
+            name="node_certificates",
+            description="Retrieve TLS certificate information for a Proxmox node (subject, issuer, expiry).",
+            inputSchema={
+                "type": "object",
+                "properties": {"node": {"type": "string", "description": "Proxmox node name."}},
+                "required": ["node"],
+            },
+        ),
+
+        # ── Notifications ─────────────────────────────────────────────────
+
+        types.Tool(
+            name="list_notification_endpoints",
+            description="List configured notification endpoints (email, Gotify, webhook, SMTP) in the cluster.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        types.Tool(
+            name="list_notification_matchers",
+            description="List notification matchers — rules that route cluster events to notification endpoints.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+
+        # ── Console ───────────────────────────────────────────────────────
+
+        types.Tool(
+            name="vm_console_url",
+            description=(
+                "Generate a noVNC console URL for a running QEMU VM or LXC container. "
+                "The returned URL can be opened in a browser to access the graphical console. "
+                "The ticket is valid for a short time only."
+            ),
+            inputSchema={"type": "object", "properties": _NODE_VMID_TYPE, "required": _REQUIRED_NVT},
+        ),
     ]
 
 # ---------------------------------------------------------------------------
@@ -1348,6 +1664,354 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             params["online"] = 1   # Proxmox expects integer 1, not boolean True
         result = _vm_api(node, vmid, vm_type).migrate.post(**params)
         return [types.TextContent(type="text", text=f"Migration task queued: {result}")]
+
+    # ── Disk management ───────────────────────────────────────────────────
+
+    if name == "vm_move_disk":
+        node, vmid = arguments["node"], arguments["vmid"]
+        disk, storage = arguments["disk"], arguments["storage"]
+        # POST /nodes/{node}/qemu/{vmid}/move_disk
+        # Proxmox copies the disk image to the target storage and updates the VM config.
+        params = {"disk": disk, "storage": storage}
+        if arguments.get("delete"):
+            params["delete"] = 1  # remove source image after successful copy
+        result = proxmox.nodes(node).qemu(vmid).move_disk.post(**params)
+        return [types.TextContent(type="text", text=f"Move disk task queued: {result}")]
+
+    if name == "vm_unlink_disk":
+        node, vmid = arguments["node"], arguments["vmid"]
+        idlist = arguments["idlist"]
+        # PUT /nodes/{node}/qemu/{vmid}/unlink
+        # idlist is a comma-separated string of disk identifiers (e.g. "scsi0,ide2").
+        params = {"idlist": idlist}
+        if arguments.get("force"):
+            params["force"] = 1  # also delete the underlying image from storage
+        proxmox.nodes(node).qemu(vmid).unlink.put(**params)
+        return [types.TextContent(type="text", text=f"Disk(s) {idlist} unlinked from VM {vmid}.")]
+
+    if name == "list_node_disks":
+        node = arguments["node"]
+        # GET /nodes/{node}/disks/list — physical block devices on the host.
+        disks = proxmox.nodes(node).disks.list.get()
+        lines = [
+            f"{d.get('devpath', '?')} | {d.get('model', 'N/A')} | "
+            f"size={util.bytes_to_human_readable(d.get('size', 0))} | "
+            f"health={d.get('health', 'N/A')} | type={d.get('type', '?')}"
+            for d in disks
+        ]
+        return [types.TextContent(type="text", text="\n".join(lines) or "No disks found.")]
+
+    if name == "vm_template":
+        node, vmid = arguments["node"], arguments["vmid"]
+        # POST /nodes/{node}/qemu/{vmid}/template
+        # Marks the VM as a template — sets read-only flag, removes volatile config (e.g. MAC).
+        # The VM must be stopped before conversion.
+        proxmox.nodes(node).qemu(vmid).template.post()
+        return [types.TextContent(type="text", text=f"VM {vmid} converted to template.")]
+
+    # ── QEMU Guest Agent ───────────────────────────────────────────────────
+
+    if name == "vm_agent_exec":
+        import time
+        node, vmid = arguments["node"], arguments["vmid"]
+        command = arguments["command"]
+        # POST /nodes/{node}/qemu/{vmid}/agent/exec
+        # The guest agent runs the command asynchronously and returns a PID.
+        # We poll /agent/exec-status until the process exits (up to 10 seconds).
+        try:
+            result = proxmox.nodes(node).qemu(vmid).agent.exec.post(
+                command=command,
+                **{"input-data": ""}  # required by the API even if empty
+            )
+            pid = result["pid"]
+            for _ in range(20):
+                time.sleep(0.5)
+                status = proxmox.nodes(node).qemu(vmid).agent("exec-status").get(pid=pid)
+                if status.get("exited"):
+                    lines = [
+                        f"exit_code={status.get('exitcode', '?')}",
+                        f"stdout:\n{status.get('out-data', '').strip()}",
+                    ]
+                    if status.get("err-data", "").strip():
+                        lines.append(f"stderr:\n{status['err-data'].strip()}")
+                    return [types.TextContent(type="text", text="\n".join(lines))]
+            return [types.TextContent(type="text", text=f"Command still running (pid={pid}). Check node_tasks for the result.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Guest agent error: {e}. Ensure qemu-guest-agent is installed and running.")]
+
+    if name == "vm_agent_info":
+        node, vmid = arguments["node"], arguments["vmid"]
+        # GET /nodes/{node}/qemu/{vmid}/agent/get-osinfo — OS information from inside the VM.
+        try:
+            info = proxmox.nodes(node).qemu(vmid).agent("get-osinfo").get()
+            result = info.get("result", info)
+            lines = [f"{k}: {v}" for k, v in sorted(result.items()) if v is not None]
+            return [types.TextContent(type="text", text="\n".join(lines))]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Guest agent error: {e}. Ensure qemu-guest-agent is installed and running.")]
+
+    if name == "vm_agent_network":
+        node, vmid = arguments["node"], arguments["vmid"]
+        # GET /nodes/{node}/qemu/{vmid}/agent/network-get-interfaces
+        # Returns interfaces as seen inside the guest OS — actual IPs, not Proxmox config.
+        try:
+            data = proxmox.nodes(node).qemu(vmid).agent("network-get-interfaces").get()
+            interfaces = data.get("result", [])
+            lines = []
+            for iface in interfaces:
+                addrs = iface.get("ip-addresses", [])
+                addr_str = ", ".join(
+                    f"{a['ip-address']}/{a.get('prefix', '?')}"
+                    for a in addrs
+                    if a.get("ip-address-type") in ("ipv4", "ipv6")
+                )
+                lines.append(
+                    f"{iface.get('name', '?')} | "
+                    f"mac={iface.get('hardware-address', 'N/A')} | "
+                    f"ips=[{addr_str}]"
+                )
+            return [types.TextContent(type="text", text="\n".join(lines) or "No interfaces found.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Guest agent error: {e}. Ensure qemu-guest-agent is installed and running.")]
+
+    # ── Backup jobs ────────────────────────────────────────────────────────
+
+    if name == "list_backup_jobs":
+        # GET /cluster/backup — scheduled vzdump job definitions.
+        # Each job has: id, enabled, schedule, storage, vmid list, mode, compress, etc.
+        jobs = proxmox.cluster.backup.get()
+        lines = [
+            f"{j.get('id', '?')} | enabled={j.get('enabled', 1)} | "
+            f"schedule={j.get('schedule', '?')} | storage={j.get('storage', '?')} | "
+            f"vmids={j.get('vmid', 'all')} | mode={j.get('mode', '?')} | "
+            f"compress={j.get('compress', '?')}"
+            for j in jobs
+        ]
+        return [types.TextContent(type="text", text="\n".join(lines) or "No backup jobs configured.")]
+
+    if name == "prune_backups":
+        node, storage = arguments["node"], arguments["storage"]
+        # DELETE /nodes/{node}/storage/{storage}/prunebackups
+        # Without keep-* parameters Proxmox performs a dry-run and returns what would be removed.
+        params = {}
+        if "vmid" in arguments:
+            params["vmid"] = arguments["vmid"]
+        for key in ("keep_last", "keep_daily", "keep_weekly", "keep_monthly"):
+            if key in arguments:
+                # Proxmox param names use hyphens: keep-last, keep-daily, etc.
+                params[key.replace("_", "-")] = arguments[key]
+        result = proxmox.nodes(node).storage(storage).prunebackups.delete(**params)
+        if isinstance(result, list):
+            lines = [
+                f"{r.get('volid', '?')} | {r.get('type', '?')} | mark={r.get('mark', '?')}"
+                for r in result
+            ]
+            return [types.TextContent(type="text", text="\n".join(lines) or "Nothing to prune.")]
+        return [types.TextContent(type="text", text=f"Prune task queued: {result}")]
+
+    # ── Replication ────────────────────────────────────────────────────────
+
+    if name == "list_replication":
+        # GET /cluster/replication — all ZFS replication jobs.
+        jobs = proxmox.cluster.replication.get()
+        lines = [
+            f"{j.get('id', '?')} | target={j.get('target', '?')} | "
+            f"schedule={j.get('schedule', '?')} | disabled={j.get('disable', 0)} | "
+            f"comment={j.get('comment', '')}"
+            for j in jobs
+        ]
+        return [types.TextContent(type="text", text="\n".join(lines) or "No replication jobs configured.")]
+
+    if name == "create_replication":
+        # POST /cluster/replication
+        # type is always "local" (only local ZFS replication is supported).
+        params = {
+            "id": arguments["id"],
+            "target": arguments["target"],
+            "type": "local",
+            "schedule": arguments.get("schedule", "*/15"),  # default: every 15 minutes
+        }
+        if "comment" in arguments:
+            params["comment"] = arguments["comment"]
+        proxmox.cluster.replication.post(**params)
+        return [types.TextContent(type="text", text=f"Replication job {arguments['id']} created.")]
+
+    if name == "delete_replication":
+        rep_id = arguments["id"]
+        # DELETE /cluster/replication/{id}
+        params = {}
+        if arguments.get("force"):
+            params["force"] = 1
+        proxmox.cluster.replication(rep_id).delete(**params)
+        return [types.TextContent(type="text", text=f"Replication job {rep_id} deleted.")]
+
+    # ── Ceph ───────────────────────────────────────────────────────────────
+
+    if name == "ceph_status":
+        node = arguments["node"]
+        try:
+            # GET /nodes/{node}/ceph/status — full Ceph cluster overview.
+            status = proxmox.nodes(node).ceph.status.get()
+            health = status.get("health", {})
+            pgmap = status.get("pgmap", {})
+            lines = [
+                f"health: {health.get('status', 'N/A')}",
+                f"pgs: {pgmap.get('num_pgs', '?')} | "
+                f"read: {util.bytes_to_human_readable(pgmap.get('read_bytes_sec', 0))}/s | "
+                f"write: {util.bytes_to_human_readable(pgmap.get('write_bytes_sec', 0))}/s",
+                f"osds: total={status.get('osdmap', {}).get('num_osds', '?')} "
+                f"up={status.get('osdmap', {}).get('num_up_osds', '?')} "
+                f"in={status.get('osdmap', {}).get('num_in_osds', '?')}",
+            ]
+            for check in health.get("checks", {}).values():
+                lines.append(f"  [{check.get('severity', '?')}] {check.get('summary', {}).get('message', '')}")
+            return [types.TextContent(type="text", text="\n".join(lines))]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Ceph not available: {e}")]
+
+    if name == "ceph_health":
+        node = arguments["node"]
+        try:
+            status = proxmox.nodes(node).ceph.status.get()
+            health = status.get("health", {})
+            overall = health.get("status", "N/A")
+            checks = health.get("checks", {})
+            lines = [f"Overall: {overall}"]
+            for check_name, check in checks.items():
+                lines.append(
+                    f"  {check_name} [{check.get('severity', '?')}]: "
+                    f"{check.get('summary', {}).get('message', '')}"
+                )
+            return [types.TextContent(type="text", text="\n".join(lines) or f"Health: {overall} — no active checks.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Ceph not available: {e}")]
+
+    if name == "ceph_osds":
+        node = arguments["node"]
+        try:
+            # GET /nodes/{node}/ceph/osd — OSD tree with status fields.
+            data = proxmox.nodes(node).ceph.osd.get()
+            osds = data.get("tree", [])
+            lines = [
+                f"osd.{o.get('id', '?')} | up={o.get('up', '?')} | in={o.get('in', '?')} | "
+                f"weight={o.get('crush_weight', '?')} | device={o.get('device_class', '?')}"
+                for o in osds if o.get("type") == "osd"
+            ]
+            return [types.TextContent(type="text", text="\n".join(lines) or "No OSDs found.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Ceph not available: {e}")]
+
+    if name == "ceph_pools":
+        node = arguments["node"]
+        try:
+            # GET /nodes/{node}/ceph/pools — Ceph storage pool list with stats.
+            pools = proxmox.nodes(node).ceph.pools.get()
+            lines = [
+                f"{p.get('pool_name', '?')} | size={p.get('size', '?')} | "
+                f"used={util.bytes_to_human_readable(p.get('bytes_used', 0))} | "
+                f"avail={util.bytes_to_human_readable(p.get('avail_raw', 0))} | "
+                f"read={util.bytes_to_human_readable(p.get('read_bytes_sec', 0))}/s | "
+                f"write={util.bytes_to_human_readable(p.get('write_bytes_sec', 0))}/s"
+                for p in pools
+            ]
+            return [types.TextContent(type="text", text="\n".join(lines) or "No Ceph pools found.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Ceph not available: {e}")]
+
+    # ── Node — OS actions ──────────────────────────────────────────────────
+
+    if name == "node_reboot":
+        node = arguments["node"]
+        # POST /nodes/{node}/status — command=reboot.
+        # Proxmox will attempt to gracefully stop VMs and containers first.
+        proxmox.nodes(node).status.post(command="reboot")
+        return [types.TextContent(type="text", text=f"Node {node} is rebooting.")]
+
+    if name == "node_shutdown":
+        node = arguments["node"]
+        # POST /nodes/{node}/status — command=shutdown.
+        proxmox.nodes(node).status.post(command="shutdown")
+        return [types.TextContent(type="text", text=f"Node {node} is shutting down.")]
+
+    if name == "node_apt_upgrade":
+        node = arguments["node"]
+        # GET /nodes/{node}/apt/update?force=1 — forces an apt-get update (package list refresh)
+        # and returns the list of upgradable packages.  Actual upgrade requires apt-get upgrade
+        # which must be run manually via the Proxmox shell or the web UI upgrade wizard.
+        updates = proxmox.nodes(node).apt.update.get(force=1)
+        lines = [
+            f"{u.get('Package', '?')} | {u.get('OldVersion', '?')} → {u.get('Version', '?')} | "
+            f"priority={u.get('Priority', '?')}"
+            for u in updates
+        ]
+        header = f"Package list refreshed. {len(lines)} update(s) available:\n" if lines else "Package list refreshed. System is up to date."
+        return [types.TextContent(type="text", text=header + "\n".join(lines))]
+
+    if name == "node_certificates":
+        node = arguments["node"]
+        # GET /nodes/{node}/certificates/info — TLS certificate details for the node's API.
+        certs = proxmox.nodes(node).certificates.info.get()
+        lines = []
+        for cert in certs:
+            lines += [
+                f"filename: {cert.get('filename', '?')}",
+                f"subject:  {cert.get('subject', 'N/A')}",
+                f"issuer:   {cert.get('issuer', 'N/A')}",
+                f"valid:    {cert.get('notbefore', 'N/A')} → {cert.get('notafter', 'N/A')}",
+                f"san:      {', '.join(cert.get('san', []))}",
+                "---",
+            ]
+        return [types.TextContent(type="text", text="\n".join(lines).rstrip("---").strip())]
+
+    # ── Notifications ──────────────────────────────────────────────────────
+
+    if name == "list_notification_endpoints":
+        # GET /cluster/notifications/endpoints — Proxmox 8.1+ notification system.
+        try:
+            endpoints = proxmox.cluster.notifications.endpoints.get()
+            lines = [
+                f"{e.get('name', '?')} | type={e.get('type', '?')} | "
+                f"enabled={e.get('enable', 1)} | comment={e.get('comment', '')}"
+                for e in endpoints
+            ]
+            return [types.TextContent(type="text", text="\n".join(lines) or "No notification endpoints configured.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Notifications API not available (requires Proxmox 8.1+): {e}")]
+
+    if name == "list_notification_matchers":
+        # GET /cluster/notifications/matchers — routing rules for cluster events.
+        try:
+            matchers = proxmox.cluster.notifications.matchers.get()
+            lines = [
+                f"{m.get('name', '?')} | enabled={m.get('enable', 1)} | "
+                f"targets={m.get('target', [])} | comment={m.get('comment', '')}"
+                for m in matchers
+            ]
+            return [types.TextContent(type="text", text="\n".join(lines) or "No notification matchers configured.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Notifications API not available (requires Proxmox 8.1+): {e}")]
+
+    # ── Console ────────────────────────────────────────────────────────────
+
+    if name == "vm_console_url":
+        node, vmid, vm_type = arguments["node"], arguments["vmid"], arguments["type"]
+        host = os.getenv("PROXMOX_HOST", "localhost")
+        port_str = os.getenv("PROXMOX_PORT", "8006")
+        try:
+            # POST /nodes/{node}/{type}/{vmid}/vncproxy — obtain a VNC ticket and port.
+            # websocket=1 requests a WebSocket-compatible ticket for noVNC.
+            ticket_data = _vm_api(node, vmid, vm_type).vncproxy.post(websocket=1)
+            ticket = ticket_data.get("ticket", "")
+            vnc_port = ticket_data.get("port", "")
+            # Construct the noVNC URL using the Proxmox built-in web console.
+            url = (
+                f"https://{host}:{port_str}/?console={'kvm' if vm_type == 'qemu' else 'lxc'}"
+                f"&novnc=1&vmid={vmid}&node={node}&resize=scale"
+                f"&port={vnc_port}&ticket={ticket}"
+            )
+            return [types.TextContent(type="text", text=f"Console URL (valid for ~30s):\n{url}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Could not generate console URL: {e}")]
 
     raise ValueError(f"Unknown tool: {name}")
 

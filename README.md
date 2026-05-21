@@ -4,9 +4,10 @@ An AI-powered management interface for **Proxmox VE** built on the
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
 An LLM (via [OpenRouter](https://openrouter.ai)) can query and control a
-Proxmox cluster in natural language by calling 46 structured tools exposed
+Proxmox cluster in natural language by calling **69 structured tools** exposed
 through the MCP server — from reading cluster metrics to creating backups,
-cloning VMs, managing firewall rules and more.
+cloning VMs, managing firewall rules, executing commands inside VMs via the
+guest agent, monitoring Ceph and more.
 
 ---
 
@@ -153,7 +154,7 @@ Add to your MCP client configuration:
 
 ---
 
-## Available Tools (46 total)
+## Available Tools (69 total)
 
 ### Informational — read-only (11)
 
@@ -179,6 +180,15 @@ Add to your MCP client configuration:
 | `create_backup` | Start a vzdump backup job for a VM or container | `node`, `vmid`, `storage` |
 | `restore_backup` | Restore a VM or container from a backup archive | `node`, `vmid`, `type`, `volid`, `storage` |
 
+### Disk management (4)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `vm_move_disk` | Move a VM disk to a different storage pool | `node`, `vmid`, `disk`, `storage` |
+| `vm_unlink_disk` | Detach (and optionally delete) disks from a QEMU VM | `node`, `vmid`, `idlist` |
+| `list_node_disks` | Physical disks on a node with model, size and S.M.A.R.T. health | `node` |
+| `vm_template` | Convert a stopped VM into a read-only clone template ⚠ | `node`, `vmid` |
+
 ### Clone & provisioning (4)
 
 | Tool | Description | Required arguments |
@@ -198,12 +208,48 @@ Add to your MCP client configuration:
 | `list_firewall_aliases` | Cluster-wide named IP aliases | — |
 | `list_firewall_ipsets` | Cluster-wide named IP groups | — |
 
+### QEMU Guest Agent (3)
+
+> Requires `qemu-guest-agent` installed and running inside the VM.
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `vm_agent_exec` | Run a shell command inside a VM and return stdout/stderr/exit code | `node`, `vmid`, `command` |
+| `vm_agent_info` | OS name, kernel version and hostname from inside the VM | `node`, `vmid` |
+| `vm_agent_network` | Real network interfaces and IPs as seen by the guest OS | `node`, `vmid` |
+
 ### Historical metrics — RRD (2)
 
 | Tool | Description | Required arguments |
 |------|-------------|--------------------|
 | `node_rrddata` | Historical CPU / memory / network / disk metrics for a node | `node` |
 | `vm_rrddata` | Historical CPU / memory / network / disk metrics for a VM/CT | `node`, `vmid`, `type` |
+
+### Backup jobs (2)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `list_backup_jobs` | Scheduled vzdump backup jobs with schedule and retention config | — |
+| `prune_backups` | Delete old backup archives using keep-last/daily/weekly/monthly retention | `node`, `storage` |
+
+### Replication (3)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `list_replication` | All ZFS replication jobs in the cluster | — |
+| `create_replication` | Create a new ZFS replication job between nodes | `id`, `target` |
+| `delete_replication` | Remove a replication job | `id` |
+
+### Ceph (4)
+
+> Only available on clusters with Ceph configured.
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `ceph_status` | Full Ceph cluster status: health, IOPS, PG states, OSD counts | `node` |
+| `ceph_health` | Detailed health checks with severity and description | `node` |
+| `ceph_osds` | All Ceph OSD daemons — up/in status, weight and device class | `node` |
+| `ceph_pools` | Ceph storage pools with replication factor and I/O stats | `node` |
 
 ### High Availability (3)
 
@@ -213,7 +259,7 @@ Add to your MCP client configuration:
 | `ha_resources` | Resources managed by the HA manager | — |
 | `ha_groups` | HA groups and node priority assignments | — |
 
-### Node — OS & system (4)
+### Node — OS & system (8)
 
 | Tool | Description | Required arguments |
 |------|-------------|--------------------|
@@ -221,6 +267,10 @@ Add to your MCP client configuration:
 | `node_syslog` | Recent system log entries from a node | `node` |
 | `node_dns` | DNS resolver configuration of a node | `node` |
 | `node_subscription` | Proxmox VE subscription status | `node` |
+| `node_reboot` | Reboot a Proxmox node ⚠ | `node` |
+| `node_shutdown` | Shut down a Proxmox node ⚠ | `node` |
+| `node_apt_upgrade` | Refresh APT package list and return upgradable packages | `node` |
+| `node_certificates` | TLS certificate subject, issuer and expiry for a node | `node` |
 
 ### Users & access control (4)
 
@@ -237,6 +287,21 @@ Add to your MCP client configuration:
 |------|-------------|--------------------|
 | `list_vnets` | SDN virtual networks | — |
 | `list_sdn_zones` | SDN zones (VXLAN, EVPN, Simple, QinQ) | — |
+
+### Notifications (2)
+
+> Requires Proxmox VE 8.1 or later.
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `list_notification_endpoints` | Configured targets: email, Gotify, webhook, SMTP | — |
+| `list_notification_matchers` | Routing rules that map cluster events to endpoints | — |
+
+### Console (1)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `vm_console_url` | Generate a noVNC browser console URL (valid ~30 seconds) | `node`, `vmid`, `type` |
 
 ### Reversible lifecycle actions (4)
 
@@ -257,6 +322,16 @@ Add to your MCP client configuration:
 | `delete_snapshot` | Permanently remove a snapshot | `node`, `vmid`, `type`, `name` |
 | `rollback_snapshot` | Restore VM/CT to snapshot state — discards all subsequent changes | `node`, `vmid`, `type`, `name` |
 | `vm_migrate` | Migrate to another node (offline or live) | `node`, `vmid`, `type`, `target` |
+
+---
+
+## MCP server — `server.py`
+
+| File | Role |
+|---|---|
+| `server.py` | MCP server — 69 tools over stdio transport |
+| `agent.py` | Interactive AI agent CLI powered by OpenRouter |
+| `util.py` | Metric formatting helpers (bytes, seconds, percentages) |
 
 ---
 
@@ -395,3 +470,26 @@ Full API docs: <https://pve.proxmox.com/pve-docs/api-viewer/index.html>
 | `delete_snapshot` | `DELETE /nodes/{node}/{type}/{vmid}/snapshot/{name}` |
 | `rollback_snapshot` | `POST /nodes/{node}/{type}/{vmid}/snapshot/{name}/rollback` |
 | `vm_migrate` | `POST /nodes/{node}/{type}/{vmid}/migrate` |
+| `vm_move_disk` | `POST /nodes/{node}/qemu/{vmid}/move_disk` |
+| `vm_unlink_disk` | `PUT /nodes/{node}/qemu/{vmid}/unlink` |
+| `list_node_disks` | `GET /nodes/{node}/disks/list` |
+| `vm_template` | `POST /nodes/{node}/qemu/{vmid}/template` |
+| `vm_agent_exec` | `POST /nodes/{node}/qemu/{vmid}/agent/exec` + `GET /agent/exec-status` |
+| `vm_agent_info` | `GET /nodes/{node}/qemu/{vmid}/agent/get-osinfo` |
+| `vm_agent_network` | `GET /nodes/{node}/qemu/{vmid}/agent/network-get-interfaces` |
+| `list_backup_jobs` | `GET /cluster/backup` |
+| `prune_backups` | `DELETE /nodes/{node}/storage/{storage}/prunebackups` |
+| `list_replication` | `GET /cluster/replication` |
+| `create_replication` | `POST /cluster/replication` |
+| `delete_replication` | `DELETE /cluster/replication/{id}` |
+| `ceph_status` | `GET /nodes/{node}/ceph/status` |
+| `ceph_health` | `GET /nodes/{node}/ceph/status` (health section) |
+| `ceph_osds` | `GET /nodes/{node}/ceph/osd` |
+| `ceph_pools` | `GET /nodes/{node}/ceph/pools` |
+| `node_reboot` | `POST /nodes/{node}/status` (`command=reboot`) |
+| `node_shutdown` | `POST /nodes/{node}/status` (`command=shutdown`) |
+| `node_apt_upgrade` | `GET /nodes/{node}/apt/update?force=1` |
+| `node_certificates` | `GET /nodes/{node}/certificates/info` |
+| `list_notification_endpoints` | `GET /cluster/notifications/endpoints` |
+| `list_notification_matchers` | `GET /cluster/notifications/matchers` |
+| `vm_console_url` | `POST /nodes/{node}/{type}/{vmid}/vncproxy` |
