@@ -1,0 +1,33 @@
+# Dockerfile.agent — packages agent.py + server.py in a single image.
+# Use this when you want to run the full interactive CLI inside Docker
+# without installing Python or dependencies on the host.
+#
+# Build:  docker build -f Dockerfile.agent -t proxmox-mcp-agent .
+# Run:    docker run --rm -it --env-file .env proxmox-mcp-agent
+
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc libffi-dev libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install both server and agent dependencies.
+COPY requirements.txt requirements-agent.txt ./
+RUN pip install --no-cache-dir --prefix=/install \
+        -r requirements.txt \
+        -r requirements-agent.txt
+
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+COPY server.py util.py agent.py ./
+
+# The agent spawns server.py as a subprocess over stdio internally.
+# When running inside Docker, server.py is in the same image so no extra
+# Docker socket or network access is needed.
+ENTRYPOINT ["python", "agent.py"]

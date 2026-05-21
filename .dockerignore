@@ -1,0 +1,37 @@
+# Credentials — must never be baked into the image
+.env
+.env.*
+!.env.example
+
+# Virtual environment — dependencies are installed fresh inside the image
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Development and documentation files — not needed at runtime
+agent.py
+test.py
+examples.md
+README.md
+*.md
+
+# IDE and OS artefacts
+.vscode/
+.idea/
+.claude/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Git history — not needed in the image
+.git/
+.gitignore
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore

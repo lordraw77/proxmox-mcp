@@ -1,0 +1,54 @@
+# Dockerfile.agent-ollama — Proxmox AI Agent powered by a local/remote Ollama instance.
+#
+# This image contains agent_ollama.py + server.py.  It does NOT bundle Ollama
+# itself — the LLM must run externally (on the host or on a remote machine)
+# and be reachable via OLLAMA_HOST.
+#
+# Build:
+#   docker build -f Dockerfile.agent-ollama -t proxmox-mcp-ollama:latest .
+#
+# Run (Ollama on the Docker host):
+#   docker run --rm -it \
+#     --env-file .env \
+#     --add-host=host.docker.internal:host-gateway \
+#     -e OLLAMA_HOST=http://host.docker.internal:11434 \
+#     proxmox-mcp-ollama:latest
+#
+# Run (Ollama on a remote machine, already set in .env):
+#   docker run --rm -it --env-file .env proxmox-mcp-ollama:latest
+
+# ── Stage 1: dependency builder ──────────────────────────────────────────────
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc libffi-dev libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install server deps + agent_ollama deps (openai + httpx for startup check).
+# httpx is already pulled in by the mcp package so no extra size cost.
+COPY requirements.txt requirements-agent.txt ./
+RUN pip install --no-cache-dir --prefix=/install \
+        -r requirements.txt \
+        -r requirements-agent.txt
+
+# ── Stage 2: runtime image ────────────────────────────────────────────────────
+FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="proxmox-mcp-ollama"
+LABEL org.opencontainers.image.description="Proxmox AI agent using a local/remote Ollama LLM backend"
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+
+# Copy only the files needed at runtime.
+# agent_ollama.py spawns server.py internally as a subprocess over stdio.
+COPY server.py util.py agent_ollama.py ./
+
+# Default environment — override at runtime via --env-file or -e flags.
+ENV OLLAMA_HOST=http://host.docker.internal:11434
+ENV OLLAMA_MODEL=qwen2.5:7b-instruct
+
+ENTRYPOINT ["python", "agent_ollama.py"]

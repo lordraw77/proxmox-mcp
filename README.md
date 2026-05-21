@@ -116,9 +116,21 @@ OPENROUTER_MODEL=anthropic/claude-opus-4.5
 
 ---
 
-## Usage
+## Agents
 
-### Interactive agent (recommended)
+Two agent implementations are available — both expose the same 69 tools and
+the same interactive REPL; they differ only in the LLM backend.
+
+| File | Backend | Internet required | Cost |
+|------|---------|-------------------|------|
+| `agent.py` | OpenRouter (cloud) | Yes | Per-token |
+| `agent_ollama.py` | Ollama (local/LAN) | No | Free |
+
+---
+
+## Usage — agent.py (OpenRouter)
+
+### Interactive CLI
 
 ```bash
 cd /opt/proxmox-mcp
@@ -126,7 +138,7 @@ cd /opt/proxmox-mcp
 ```
 
 ```
-Proxmox Agent — model: anthropic/claude-opus-4.5
+Proxmox Agent — model: anthropic/claude-opus-4.5 | backend: local venv
 Type a question or 'exit' to quit.
 
 >>> How many nodes are in the cluster?
@@ -137,7 +149,107 @@ Type a question or 'exit' to quit.
 >>> exit
 ```
 
-### MCP server standalone (for Claude Desktop or other MCP clients)
+### Docker backend
+
+```bash
+# Build the server image
+docker build -t proxmox-mcp:latest .
+
+# Run agent.py but spawn server.py inside Docker
+MCP_USE_DOCKER=true .venv/bin/python agent.py
+
+# Fully containerised (agent + server in one image)
+docker build -f Dockerfile.agent -t proxmox-mcp-agent:latest .
+docker run --rm -it --env-file .env proxmox-mcp-agent:latest
+
+# Via compose
+docker compose --profile agent run --rm agent
+```
+
+---
+
+## Usage — agent_ollama.py (Ollama)
+
+Runs entirely on your local network — no cloud API key needed.
+
+### Supported models
+
+Not every Ollama model supports structured tool calling.
+Install a model with `ollama pull <name>` before starting the agent.
+
+| Model | Size | Tool use |
+|-------|------|----------|
+| `qwen2.5:7b-instruct` | 4.7 GB | ★★★★★ Recommended |
+| `qwen2.5:14b` | 9.0 GB | ★★★★★ Best quality |
+| `llama3.1:8b` | 4.7 GB | ★★★★☆ Very good |
+| `llama3.2:3b` | 2.0 GB | ★★★☆☆ Good, fast |
+| `mistral:7b` | 4.1 GB | ★★★☆☆ Decent |
+| `gemma3:4b` | 3.3 GB | ★★☆☆☆ Limited |
+
+### Ollama on the same machine
+
+```bash
+# 1. Start Ollama
+ollama serve
+
+# 2. Pull a tool-capable model
+ollama pull qwen2.5:7b-instruct
+
+# 3. Run the agent
+.venv/bin/python agent_ollama.py
+```
+
+### Ollama on a remote machine (LAN)
+
+```dotenv
+# .env
+OLLAMA_HOST=http://192.168.0.140:11434
+OLLAMA_MODEL=qwen2.5:7b-instruct
+```
+
+```bash
+.venv/bin/python agent_ollama.py
+```
+
+### Docker — Ollama on a remote machine
+
+```bash
+docker build -f Dockerfile.agent-ollama -t proxmox-mcp-ollama:latest .
+docker run --rm -it --env-file .env proxmox-mcp-ollama:latest
+```
+
+### Docker — Ollama on the Docker host
+
+```bash
+docker run --rm -it \
+  --env-file .env \
+  --add-host=host.docker.internal:host-gateway \
+  -e OLLAMA_HOST=http://host.docker.internal:11434 \
+  proxmox-mcp-ollama:latest
+```
+
+### Via compose
+
+```bash
+# Build
+docker compose --profile ollama build
+
+# Run
+docker compose --profile ollama run --rm agent-ollama
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama base URL |
+| `OLLAMA_MODEL` | `qwen2.5:7b-instruct` | Model to use |
+| `MCP_USE_DOCKER` | `false` | Spawn MCP server in Docker |
+| `MCP_DOCKER_IMAGE` | `proxmox-mcp:latest` | Docker image for MCP server |
+
+---
+
+## MCP server standalone (Claude Desktop or any MCP client)
 
 Add to your MCP client configuration:
 
@@ -147,6 +259,19 @@ Add to your MCP client configuration:
     "proxmox": {
       "command": "/opt/proxmox-mcp/.venv/bin/python",
       "args": ["/opt/proxmox-mcp/server.py"]
+    }
+  }
+}
+```
+
+Or with Docker:
+
+```json
+{
+  "mcpServers": {
+    "proxmox": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "--env-file", "/opt/proxmox-mcp/.env", "proxmox-mcp:latest"]
     }
   }
 }
@@ -387,18 +512,27 @@ but **not** carried across separate questions.
 
 ## Selecting a model
 
+### OpenRouter (agent.py)
+
 ```dotenv
-# Fast and inexpensive
-OPENROUTER_MODEL=anthropic/claude-haiku-4-5
+OPENROUTER_MODEL=anthropic/claude-haiku-4-5    # fast, inexpensive
+OPENROUTER_MODEL=anthropic/claude-opus-4.5     # balanced — recommended
+OPENROUTER_MODEL=google/gemini-2.5-pro         # Google alternative
+OPENROUTER_MODEL=openrouter/free               # free tier
+```
 
-# Balanced — recommended for most tasks
-OPENROUTER_MODEL=anthropic/claude-opus-4.5
+### Ollama (agent_ollama.py)
 
-# Google alternative
-OPENROUTER_MODEL=google/gemini-2.5-pro
+```bash
+ollama pull qwen2.5:7b-instruct   # recommended — best tool calling
+ollama pull llama3.1:8b           # good alternative
+ollama pull llama3.2:3b           # lighter, for low-memory machines
+```
 
-# Free tier — OpenRouter picks a free model
-OPENROUTER_MODEL=openrouter/free
+```dotenv
+OLLAMA_HOST=http://localhost:11434          # local Ollama
+OLLAMA_HOST=http://192.168.0.140:11434     # remote Ollama on LAN
+OLLAMA_MODEL=qwen2.5:7b-instruct
 ```
 
 ---
@@ -408,10 +542,25 @@ OPENROUTER_MODEL=openrouter/free
 ```
 /opt/proxmox-mcp/
 ├── .env                          # credentials (not committed)
+├── .env.example                  # template — copy to .env and fill in
 ├── .venv/                        # Python 3.12 virtual environment
-├── server.py                     # MCP server — 46 Proxmox tools
-├── agent.py                      # Interactive AI agent CLI
+│
+├── server.py                     # MCP server — 69 Proxmox tools (stdio)
 ├── util.py                       # Metric formatting helpers
+│
+├── agent.py                      # Agent CLI — OpenRouter backend
+├── agent_ollama.py               # Agent CLI — Ollama backend (local/LAN)
+│
+├── Dockerfile                    # MCP server image (server.py only)
+├── Dockerfile.agent              # All-in-one: agent.py + server.py
+├── Dockerfile.agent-ollama       # All-in-one: agent_ollama.py + server.py
+├── docker-compose.yml            # Compose: mcp-server, agent, agent-ollama
+├── .dockerignore                 # Excludes .env, .venv, docs from images
+│
+├── requirements.txt              # Server deps (mcp, proxmoxer, dotenv, requests)
+├── requirements-agent.txt        # Agent extra deps (openai)
+│
+├── examples.md                   # 70 tool call examples (JSON + prompts)
 ├── claude_desktop_config.json    # Ready-made Claude Desktop config
 └── README.md                     # This file
 ```

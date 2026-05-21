@@ -34,18 +34,32 @@ across separate ask() calls (stateless between user prompts).
 Transport
 ---------
   LLM   : OpenRouter HTTPS API (OpenAI-compatible format)
-  MCP   : stdio — server.py is launched as a subprocess for every ask() call
+  MCP   : stdio — server.py is launched as a subprocess for every ask() call.
+          Two subprocess modes are supported:
+            local  (default) — spawns .venv/bin/python server.py
+            docker           — spawns docker run proxmox-mcp:latest
 
 Environment variables (loaded from .env)
 -----------------------------------------
   OPENROUTER_API_KEY  — your OpenRouter API key (required)
   OPENROUTER_MODEL    — model string to use, e.g. "anthropic/claude-opus-4.5"
                         Defaults to "openrouter/free" (free-tier routing)
+  MCP_USE_DOCKER      — set to "true" to spawn server.py inside a Docker
+                        container instead of the local virtualenv.
+                        Requires the proxmox-mcp:latest image to be built.
+  MCP_DOCKER_IMAGE    — Docker image to use (default: proxmox-mcp:latest)
+  MCP_ENV_FILE        — path to the .env file forwarded to the container
+                        via --env-file (default: .env in the working directory)
 
-Usage
------
+Usage — local virtualenv
+-------------------------
   cd /opt/proxmox-mcp
   .venv/bin/python agent.py
+
+Usage — Docker backend
+-----------------------
+  docker build -t proxmox-mcp:latest .
+  MCP_USE_DOCKER=true .venv/bin/python agent.py
 
   >>> How many VMs are running on node pve?
   >>> Show me the config of VM 100
@@ -73,16 +87,60 @@ dotenv.load_dotenv()
 # a specific model (e.g. "anthropic/claude-opus-4.5", "google/gemini-2.5-pro").
 MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
 
-# Parameters for spawning the MCP server as a child process.
-# The server must be launched with the venv interpreter so it has access to
-# proxmoxer and the mcp library.  os.environ is forwarded so the child
-# process inherits PROXMOX_* credentials (already loaded by dotenv in the
-# parent, which populates os.environ).
-SERVER_PARAMS = StdioServerParameters(
-    command=str(os.path.abspath(".venv/bin/python")),   # absolute path — safe regardless of cwd
-    args=[str(os.path.abspath("server.py"))],            # MCP server entry point
-    env={**os.environ},                                  # forward all environment variables
-)
+# ---------------------------------------------------------------------------
+# MCP server spawn parameters
+# ---------------------------------------------------------------------------
+
+def _build_server_params() -> StdioServerParameters:
+    """
+    Return the StdioServerParameters used to spawn the MCP server process.
+
+    Two modes are supported:
+
+    Local mode (default)
+        Spawns .venv/bin/python server.py directly.  Fastest — no container
+        overhead.  Requires the virtualenv to be set up on the host.
+
+    Docker mode  (MCP_USE_DOCKER=true)
+        Spawns a Docker container from the proxmox-mcp:latest image.
+        Credentials are forwarded via --env-file so they are never baked
+        into the image.  Requires:
+          1. Docker daemon running on the host
+          2. proxmox-mcp:latest image built:  docker build -t proxmox-mcp .
+
+    Returns:
+        StdioServerParameters compatible with mcp.client.stdio.stdio_client()
+    """
+    use_docker = os.getenv("MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
+
+    if use_docker:
+        image = os.getenv("MCP_DOCKER_IMAGE", "proxmox-mcp:latest")
+        env_file = os.path.abspath(os.getenv("MCP_ENV_FILE", ".env"))
+        return StdioServerParameters(
+            command="docker",
+            args=[
+                "run",
+                "--rm",          # remove the container when the process exits
+                "-i",            # keep stdin open — required for stdio JSON-RPC
+                "--env-file", env_file,   # forward PROXMOX_* credentials
+                image,
+            ],
+            # The container reads credentials from --env-file, so the host
+            # environment is not forwarded (avoids leaking unrelated vars).
+            env={},
+        )
+
+    # Local mode — spawn the venv Python interpreter with server.py.
+    # os.environ is forwarded so the child process inherits PROXMOX_*
+    # credentials already loaded by dotenv.load_dotenv() above.
+    return StdioServerParameters(
+        command=str(os.path.abspath(".venv/bin/python")),
+        args=[str(os.path.abspath("server.py"))],
+        env={**os.environ},
+    )
+
+
+SERVER_PARAMS = _build_server_params()
 
 # ---------------------------------------------------------------------------
 # Tool format conversion
@@ -260,7 +318,9 @@ async def main():
     The loop exits cleanly on EOF (Ctrl-D), KeyboardInterrupt (Ctrl-C),
     or when the user types 'exit', 'quit' or 'q'.
     """
-    print(f"Proxmox Agent — model: {MODEL}")
+    use_docker = os.getenv("MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
+    backend = f"docker ({os.getenv('MCP_DOCKER_IMAGE', 'proxmox-mcp:latest')})" if use_docker else "local venv"
+    print(f"Proxmox Agent — model: {MODEL} | backend: {backend}")
     print("Type a question or 'exit' to quit.\n")
 
     while True:

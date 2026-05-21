@@ -1,0 +1,69 @@
+services:
+
+  # ── MCP server ─────────────────────────────────────────────────────────────
+  # Runs the Proxmox MCP server in stdio mode.
+  # NOT started by `docker compose up` — spawned on demand by agent.py:
+  #   docker compose run --rm mcp-server
+  # The -i flag (stdin open) is required for the stdio JSON-RPC pipe.
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: proxmox-mcp:latest
+    env_file:
+      - .env
+    stdin_open: true
+    restart: "no"
+
+  # ── Agent — OpenRouter ──────────────────────────────────────────────────────
+  # Interactive CLI agent backed by OpenRouter (cloud LLM).
+  # Spawns server.py as a subprocess inside the same container.
+  #
+  # Usage:
+  #   docker compose --profile agent run --rm agent
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: proxmox-mcp-agent:latest
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    restart: "no"
+    profiles:
+      - agent
+
+  # ── Agent — Ollama ──────────────────────────────────────────────────────────
+  # Interactive CLI agent backed by a local or remote Ollama instance.
+  # Spawns server.py as a subprocess inside the same container.
+  # Ollama is NOT bundled — it must run externally and be reachable via
+  # OLLAMA_HOST (set in .env or passed with -e).
+  #
+  # Usage (Ollama on the same machine as Docker):
+  #   docker compose --profile ollama run --rm agent-ollama
+  #
+  # Usage (Ollama on a remote machine — set OLLAMA_HOST in .env):
+  #   docker compose --profile ollama run --rm agent-ollama
+  agent-ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent-ollama
+    image: proxmox-mcp-ollama:latest
+    env_file:
+      - .env
+    environment:
+      # When Ollama runs on the Docker host, override OLLAMA_HOST here.
+      # If OLLAMA_HOST is already set correctly in .env (e.g. pointing to a
+      # remote machine like http://192.168.0.140:11434), remove these lines.
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+    # host.docker.internal resolves to the host machine IP on Linux with
+    # Docker Engine 20.10+.  Required only when Ollama runs on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    stdin_open: true
+    tty: true
+    restart: "no"
+    profiles:
+      - ollama
