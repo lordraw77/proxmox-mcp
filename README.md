@@ -4,10 +4,11 @@ An AI-powered management interface for **Proxmox VE** built on the
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
 An LLM (via [OpenRouter](https://openrouter.ai)) can query and control a
-Proxmox cluster in natural language by calling **69 structured tools** exposed
+Proxmox cluster in natural language by calling **91 structured tools** exposed
 through the MCP server — from reading cluster metrics to creating backups,
-cloning VMs, managing firewall rules, executing commands inside VMs via the
-guest agent, monitoring Ceph and more.
+cloning VMs, managing firewall rules, executing commands inside VMs and LXC
+containers, monitoring Ceph, managing network interfaces, resource pools,
+API tokens and more.
 
 ---
 
@@ -30,8 +31,11 @@ Proxmox VE cluster
 
 | Component | File | Role |
 |-----------|------|------|
-| MCP Server | `server.py` | Wraps the Proxmox REST API as 46 MCP tools |
-| AI Agent | `agent.py` | Drives the LLM ↔ MCP tool-use loop; interactive CLI |
+| MCP Server | `server.py` | Wraps the Proxmox REST API as 91 MCP tools |
+| AI Agent | `agent.py` | Drives the LLM ↔ MCP tool-use loop; interactive CLI (OpenRouter) |
+| SRE Agent | `agent_sre.py` | ReAct SRE agent — multi-provider, read-only advisory mode |
+| Ollama Agent | `agent_ollama.py` | Same loop via local/LAN Ollama inference |
+| Provider lib | `llm.py` | Shared provider registry, client factory, agentic loop |
 | Utilities | `util.py` | Formats raw bytes / seconds / fractions for display |
 
 ---
@@ -279,7 +283,7 @@ Or with Docker:
 
 ---
 
-## Available Tools (69 total)
+## Available Tools (91 total)
 
 ### Informational — read-only (11)
 
@@ -428,6 +432,73 @@ Or with Docker:
 |------|-------------|--------------------|
 | `vm_console_url` | Generate a noVNC browser console URL (valid ~30 seconds) | `node`, `vmid`, `type` |
 
+### Task management (2)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `wait_for_task` | Poll a UPID until the task finishes, return final status | `node`, `upid` |
+| `cancel_task` | Cancel a running task by UPID | `node`, `upid` |
+
+### VM / CT configuration write (2)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `vm_set_config` | Update arbitrary config keys (name, memory, cores, tags, onboot…) | `node`, `vmid`, `type`, `config_params` |
+| `vm_set_cdrom` | Mount or eject an ISO on a QEMU VM's CD-ROM slot | `node`, `vmid` |
+
+### LXC exec (1)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `lxc_exec` | Execute a command inside a running LXC container (no guest agent required) | `node`, `vmid`, `command` |
+
+### Storage management (3)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `storage_status` | Detailed usage stats for a storage pool (total/used/avail) | `node`, `storage` |
+| `create_storage` | Add a new storage backend (dir, nfs, cifs, lvm, zfspool, rbd…) | `storage`, `type` |
+| `delete_storage` | Remove a storage backend from the cluster config | `storage` |
+
+### Resource pool management (4)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `create_pool` | Create a resource pool | `poolid` |
+| `delete_pool` | Delete a resource pool | `poolid` |
+| `pool_add_member` | Add VMs and/or storage to a pool | `poolid` |
+| `pool_remove_member` | Remove VMs and/or storage from a pool | `poolid` |
+
+### Network management (3)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `create_network` | Stage a new network interface or bridge on a node | `node`, `iface`, `type` |
+| `delete_network` | Stage removal of a network interface on a node | `node`, `iface` |
+| `apply_network_config` | Apply all pending network changes (ifreload -a) | `node` |
+
+### Diagnostics (3)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `node_smart` | S.M.A.R.T. health data for a specific physical disk | `node`, `disk` |
+| `cluster_health_summary` | Aggregate health across nodes, HA, tasks, Ceph and storage | — |
+| `node_top` | Current CPU, memory, swap, disk and VM/CT count snapshot | `node` |
+
+### ACME / TLS certificates (2)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `list_acme_accounts` | List registered Let's Encrypt ACME accounts | — |
+| `renew_certificate` | Force renewal of a node's ACME TLS certificate | `node` |
+
+### API token management (2)
+
+| Tool | Description | Required arguments |
+|------|-------------|--------------------|
+| `create_api_token` | Create a new API token for a user (secret shown once) | `userid`, `tokenid` |
+| `delete_api_token` | Revoke and delete an API token | `userid`, `tokenid` |
+
 ### Reversible lifecycle actions (4)
 
 | Tool | Description | Required arguments |
@@ -450,12 +521,15 @@ Or with Docker:
 
 ---
 
-## MCP server — `server.py`
+## Project files
 
 | File | Role |
 |---|---|
-| `server.py` | MCP server — 69 tools over stdio transport |
-| `agent.py` | Interactive AI agent CLI powered by OpenRouter |
+| `server.py` | MCP server — 91 tools over stdio transport |
+| `llm.py` | Shared provider registry, client factory, agentic loop |
+| `agent.py` | Interactive CLI agent — OpenRouter backend |
+| `agent_ollama.py` | Interactive CLI agent — Ollama backend (local/LAN) |
+| `agent_sre.py` | SRE ReAct agent — multi-provider, read-only advisory mode |
 | `util.py` | Metric formatting helpers (bytes, seconds, percentages) |
 
 ---

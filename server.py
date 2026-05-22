@@ -12,7 +12,7 @@ Protocol   : MCP 2024-11-05
 Auth       : credentials loaded from .env via python-dotenv
 API backend: proxmoxer (thin Python wrapper over the Proxmox VE REST API)
 
-Tool categories (69 total)
+Tool categories (91 total)
 ---------------------------
   Informational — read-only (11)
     list_nodes, list_vms, list_storage, vm_status, vm_config,
@@ -41,6 +41,9 @@ Tool categories (69 total)
   QEMU Guest Agent (3)
     vm_agent_exec, vm_agent_info, vm_agent_network
 
+  LXC exec (1)
+    lxc_exec
+
   Backup jobs (2)
     list_backup_jobs, prune_backups
 
@@ -50,7 +53,7 @@ Tool categories (69 total)
   Ceph (4)
     ceph_status, ceph_health, ceph_osds, ceph_pools
 
-  Node — OS & system (6)
+  Node — OS & system (8)
     node_apt_updates, node_syslog, node_dns, node_subscription,
     node_reboot, node_shutdown, node_apt_upgrade, node_certificates
 
@@ -71,6 +74,30 @@ Tool categories (69 total)
 
   Persistent state changes ⚠ (4)
     create_snapshot, delete_snapshot, rollback_snapshot, vm_migrate
+
+  Task management (2)
+    wait_for_task, cancel_task
+
+  VM / CT configuration write (2)
+    vm_set_config, vm_set_cdrom
+
+  Storage management (3)
+    storage_status, create_storage, delete_storage
+
+  Resource pool management (4)
+    create_pool, delete_pool, pool_add_member, pool_remove_member
+
+  Network management (3)
+    create_network, delete_network, apply_network_config
+
+  Diagnostics (3)
+    node_smart, cluster_health_summary, node_top
+
+  ACME / TLS certificates (2)
+    list_acme_accounts, renew_certificate
+
+  API token management (2)
+    create_api_token, delete_api_token
 
 Authentication
 --------------
@@ -1031,6 +1058,364 @@ async def list_tools() -> list[types.Tool]:
                 "The ticket is valid for a short time only."
             ),
             inputSchema={"type": "object", "properties": _NODE_VMID_TYPE, "required": _REQUIRED_NVT},
+        ),
+
+        # ── Task management ───────────────────────────────────────────────────
+
+        types.Tool(
+            name="wait_for_task",
+            description=(
+                "Poll a Proxmox task (UPID) until it finishes and return the final status. "
+                "Useful after create_backup, vm_clone, vm_migrate and other async operations."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Node that owns the task."},
+                    "upid": {"type": "string", "description": "Task UPID string returned by the async operation."},
+                    "timeout": {"type": "integer", "description": "Maximum seconds to wait (default 120)."},
+                },
+                "required": ["node", "upid"],
+            },
+        ),
+        types.Tool(
+            name="cancel_task",
+            description="Cancel a running Proxmox task by its UPID.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Node that owns the task."},
+                    "upid": {"type": "string", "description": "Task UPID string to cancel."},
+                },
+                "required": ["node", "upid"],
+            },
+        ),
+
+        # ── VM / CT configuration write ───────────────────────────────────────
+
+        types.Tool(
+            name="vm_set_config",
+            description=(
+                "Update one or more configuration parameters of a VM or container. "
+                "Accepts any Proxmox config key in config_params "
+                "(e.g. name, memory, cores, description, tags, onboot, protection)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    **_NODE_VMID_TYPE,
+                    "config_params": {
+                        "type": "object",
+                        "description": (
+                            "Key-value pairs of Proxmox config options to set. "
+                            "Examples: {\"memory\": 2048, \"cores\": 4, \"description\": \"prod\", "
+                            "\"tags\": \"prod;web\", \"onboot\": 1, \"protection\": 0}"
+                        ),
+                    },
+                },
+                "required": [*_REQUIRED_NVT, "config_params"],
+            },
+        ),
+        types.Tool(
+            name="vm_set_cdrom",
+            description=(
+                "Mount or unmount an ISO image on a QEMU VM's CD-ROM drive. "
+                "Pass iso_volid to mount (e.g. 'local:iso/debian-12.iso'), "
+                "omit or pass empty string to eject."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "VM ID (QEMU only)."},
+                    "iso_volid": {
+                        "type": "string",
+                        "description": "ISO volume ID to mount, e.g. 'local:iso/debian-12.iso'. Empty to eject.",
+                    },
+                    "ide_slot": {
+                        "type": "string",
+                        "description": "CD-ROM device slot (default: 'ide2').",
+                    },
+                },
+                "required": ["node", "vmid"],
+            },
+        ),
+
+        # ── LXC exec ──────────────────────────────────────────────────────────
+
+        types.Tool(
+            name="lxc_exec",
+            description=(
+                "Execute a command inside a running LXC container via the Proxmox API. "
+                "Does not require a guest agent. Returns stdout, stderr and exit code."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "vmid": {"type": "integer", "description": "LXC container ID."},
+                    "command": {"type": "string", "description": "Shell command to execute, e.g. 'df -h'."},
+                },
+                "required": ["node", "vmid", "command"],
+            },
+        ),
+
+        # ── Storage management ────────────────────────────────────────────────
+
+        types.Tool(
+            name="storage_status",
+            description="Detailed usage statistics for a storage pool on a node: total, used, available.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "storage": {"type": "string", "description": "Storage pool name."},
+                },
+                "required": ["node", "storage"],
+            },
+        ),
+        types.Tool(
+            name="create_storage",
+            description=(
+                "Add a new storage backend to the cluster. "
+                "Supported types: dir, nfs, cifs, lvm, lvmthin, zfspool, rbd, cephfs, pbs."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "storage": {"type": "string", "description": "Unique storage ID."},
+                    "type": {
+                        "type": "string",
+                        "enum": ["dir", "nfs", "cifs", "lvm", "lvmthin", "zfspool", "rbd", "cephfs", "pbs"],
+                        "description": "Storage backend type.",
+                    },
+                    "path": {"type": "string", "description": "Local directory path (type=dir)."},
+                    "server": {"type": "string", "description": "NFS/CIFS/PBS server hostname or IP."},
+                    "export": {"type": "string", "description": "NFS export path."},
+                    "share": {"type": "string", "description": "CIFS share name."},
+                    "vg_name": {"type": "string", "description": "LVM volume group name."},
+                    "pool": {"type": "string", "description": "ZFS pool or Ceph pool name."},
+                    "content": {"type": "string", "description": "Comma-separated content types: images,rootdir,vztmpl,backup,iso,snippets."},
+                    "nodes": {"type": "string", "description": "Comma-separated nodes that can use this storage (empty = all)."},
+                    "shared": {"type": "integer", "enum": [0, 1], "description": "1 if shared across all nodes."},
+                },
+                "required": ["storage", "type"],
+            },
+        ),
+        types.Tool(
+            name="delete_storage",
+            description="Remove a storage backend from the cluster configuration. Does not delete underlying data.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "storage": {"type": "string", "description": "Storage ID to remove."},
+                },
+                "required": ["storage"],
+            },
+        ),
+
+        # ── Resource pool management ──────────────────────────────────────────
+
+        types.Tool(
+            name="create_pool",
+            description="Create a new resource pool for grouping VMs and storage.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "poolid": {"type": "string", "description": "Unique pool identifier."},
+                    "comment": {"type": "string", "description": "Optional description."},
+                },
+                "required": ["poolid"],
+            },
+        ),
+        types.Tool(
+            name="delete_pool",
+            description="Delete a resource pool. The pool must be empty.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "poolid": {"type": "string", "description": "Pool ID to delete."},
+                },
+                "required": ["poolid"],
+            },
+        ),
+        types.Tool(
+            name="pool_add_member",
+            description="Add VMs and/or storage pools to a resource pool.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "poolid": {"type": "string", "description": "Pool ID."},
+                    "vms": {"type": "string", "description": "Comma-separated VM/CT IDs to add, e.g. '100,101'."},
+                    "storage": {"type": "string", "description": "Comma-separated storage IDs to add."},
+                },
+                "required": ["poolid"],
+            },
+        ),
+        types.Tool(
+            name="pool_remove_member",
+            description="Remove VMs and/or storage pools from a resource pool.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "poolid": {"type": "string", "description": "Pool ID."},
+                    "vms": {"type": "string", "description": "Comma-separated VM/CT IDs to remove."},
+                    "storage": {"type": "string", "description": "Comma-separated storage IDs to remove."},
+                },
+                "required": ["poolid"],
+            },
+        ),
+
+        # ── Network management ────────────────────────────────────────────────
+
+        types.Tool(
+            name="create_network",
+            description=(
+                "Create a network interface or bridge on a node. "
+                "Changes are staged — call apply_network_config to activate."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "iface": {"type": "string", "description": "Interface name, e.g. 'vmbr1'."},
+                    "type": {
+                        "type": "string",
+                        "enum": ["bridge", "bond", "eth", "vlan", "alias", "OVSBridge", "OVSBond", "OVSPort", "OVSIntPort"],
+                        "description": "Interface type.",
+                    },
+                    "cidr": {"type": "string", "description": "IPv4 address/prefix, e.g. '192.168.10.1/24'."},
+                    "cidr6": {"type": "string", "description": "IPv6 address/prefix."},
+                    "gateway": {"type": "string", "description": "IPv4 default gateway."},
+                    "gateway6": {"type": "string", "description": "IPv6 default gateway."},
+                    "bridge_ports": {"type": "string", "description": "Space-separated bridge ports, e.g. 'eth0'."},
+                    "bond_slaves": {"type": "string", "description": "Space-separated bond slave interfaces."},
+                    "vlan_id": {"type": "integer", "description": "VLAN tag ID."},
+                    "vlan_raw_device": {"type": "string", "description": "Raw device for VLAN, e.g. 'eth0'."},
+                    "autostart": {"type": "integer", "enum": [0, 1], "description": "Bring up at boot (default 1)."},
+                    "comments": {"type": "string", "description": "Free-text comment."},
+                },
+                "required": ["node", "iface", "type"],
+            },
+        ),
+        types.Tool(
+            name="delete_network",
+            description="Remove a staged network interface from a node. Call apply_network_config to activate.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "iface": {"type": "string", "description": "Interface name to remove."},
+                },
+                "required": ["node", "iface"],
+            },
+        ),
+        types.Tool(
+            name="apply_network_config",
+            description=(
+                "Apply pending network configuration changes on a node (ifreload -a). "
+                "Required after create_network or delete_network."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                },
+                "required": ["node"],
+            },
+        ),
+
+        # ── Diagnostics ───────────────────────────────────────────────────────
+
+        types.Tool(
+            name="node_smart",
+            description=(
+                "Retrieve S.M.A.R.T. health data for a physical disk on a node. "
+                "Use list_node_disks to find the device path."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "disk": {"type": "string", "description": "Block device path, e.g. '/dev/sda'."},
+                },
+                "required": ["node", "disk"],
+            },
+        ),
+        types.Tool(
+            name="cluster_health_summary",
+            description=(
+                "Aggregate health check across the entire cluster: nodes, HA, tasks, "
+                "Ceph (if configured) and storage. Single call for a fast overall assessment."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        types.Tool(
+            name="node_top",
+            description="Current resource snapshot for a node: CPU, memory, swap, disk I/O wait and VM/CT count.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                },
+                "required": ["node"],
+            },
+        ),
+
+        # ── ACME / TLS ────────────────────────────────────────────────────────
+
+        types.Tool(
+            name="list_acme_accounts",
+            description="List ACME (Let's Encrypt) accounts registered in the cluster.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        types.Tool(
+            name="renew_certificate",
+            description=(
+                "Force renewal of the ACME/Let's Encrypt TLS certificate for a node. "
+                "Requires ACME to be configured. The API may be briefly unavailable during renewal."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node": {"type": "string", "description": "Proxmox node name."},
+                    "force": {"type": "boolean", "description": "Renew even if not yet expiring (default false)."},
+                },
+                "required": ["node"],
+            },
+        ),
+
+        # ── API token management ──────────────────────────────────────────────
+
+        types.Tool(
+            name="create_api_token",
+            description=(
+                "Create a new API token for a Proxmox user. "
+                "The token secret is returned only once — store it immediately."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "userid": {"type": "string", "description": "Full user ID, e.g. 'root@pam'."},
+                    "tokenid": {"type": "string", "description": "Token name (alphanumeric)."},
+                    "comment": {"type": "string", "description": "Optional description."},
+                    "expire": {"type": "integer", "description": "Expiry as Unix timestamp (0 = never, default 0)."},
+                    "privsep": {"type": "integer", "enum": [0, 1], "description": "1 = separate token privileges from user (default 1)."},
+                },
+                "required": ["userid", "tokenid"],
+            },
+        ),
+        types.Tool(
+            name="delete_api_token",
+            description="Revoke and delete an API token.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "userid": {"type": "string", "description": "Full user ID, e.g. 'root@pam'."},
+                    "tokenid": {"type": "string", "description": "Token name to delete."},
+                },
+                "required": ["userid", "tokenid"],
+            },
         ),
     ]
 
@@ -2012,6 +2397,322 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return [types.TextContent(type="text", text=f"Console URL (valid for ~30s):\n{url}")]
         except Exception as e:
             return [types.TextContent(type="text", text=f"Could not generate console URL: {e}")]
+
+    # ── Task management ────────────────────────────────────────────────────────
+
+    if name == "wait_for_task":
+        import time
+        node = arguments["node"]
+        upid = arguments["upid"]
+        timeout = arguments.get("timeout", 120)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            status = proxmox.nodes(node).tasks(upid).status.get()
+            if status.get("status") != "running":
+                return [types.TextContent(type="text", text=(
+                    f"Task finished.\n"
+                    f"status:    {status.get('status', '?')}\n"
+                    f"exitstatus: {status.get('exitstatus', 'N/A')}\n"
+                    f"upid:      {upid}"
+                ))]
+            time.sleep(2)
+        return [types.TextContent(type="text", text=f"Timeout after {timeout}s — task still running: {upid}")]
+
+    if name == "cancel_task":
+        node = arguments["node"]
+        upid = arguments["upid"]
+        # DELETE /nodes/{node}/tasks/{upid} — stops a running task.
+        proxmox.nodes(node).tasks(upid).delete()
+        return [types.TextContent(type="text", text=f"Task {upid} cancellation requested.")]
+
+    # ── VM / CT configuration write ────────────────────────────────────────────
+
+    if name == "vm_set_config":
+        node, vmid, vm_type = arguments["node"], arguments["vmid"], arguments["type"]
+        params = arguments["config_params"]
+        # PUT /nodes/{node}/{type}/{vmid}/config — partial update; only sent keys are changed.
+        _vm_api(node, vmid, vm_type).config.put(**params)
+        return [types.TextContent(type="text", text=f"Config updated for {vm_type} {vmid}: {list(params.keys())}")]
+
+    if name == "vm_set_cdrom":
+        node, vmid = arguments["node"], arguments["vmid"]
+        slot = arguments.get("ide_slot", "ide2")
+        iso = arguments.get("iso_volid", "").strip()
+        # Build the device string: either "volid,media=cdrom" or "none,media=cdrom" to eject.
+        device_str = f"{iso},media=cdrom" if iso else "none,media=cdrom"
+        proxmox.nodes(node).qemu(vmid).config.put(**{slot: device_str})
+        action = f"mounted '{iso}'" if iso else "ejected"
+        return [types.TextContent(type="text", text=f"CD-ROM {slot} {action} on VM {vmid}.")]
+
+    # ── LXC exec ───────────────────────────────────────────────────────────────
+
+    if name == "lxc_exec":
+        import time, shlex
+        node, vmid = arguments["node"], arguments["vmid"]
+        command = arguments["command"]
+        # POST /nodes/{node}/lxc/{vmid}/exec — async, returns PID; poll exec-status.
+        try:
+            cmd_parts = shlex.split(command)
+            result = proxmox.nodes(node).lxc(vmid).exec.post(
+                command=cmd_parts
+            )
+            pid = result["pid"]
+            for _ in range(30):
+                time.sleep(0.5)
+                st = proxmox.nodes(node).lxc(vmid)("exec-status").get(pid=pid)
+                if st.get("exited"):
+                    lines = [f"exit_code={st.get('exitcode', '?')}",
+                             f"stdout:\n{st.get('out-data', '').strip()}"]
+                    if st.get("err-data", "").strip():
+                        lines.append(f"stderr:\n{st['err-data'].strip()}")
+                    return [types.TextContent(type="text", text="\n".join(lines))]
+            return [types.TextContent(type="text", text=f"Command still running (pid={pid}).")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"LXC exec error: {e}")]
+
+    # ── Storage management ──────────────────────────────────────────────────────
+
+    if name == "storage_status":
+        node, storage = arguments["node"], arguments["storage"]
+        # GET /nodes/{node}/storage/{storage}/status — live usage counters.
+        st = proxmox.nodes(node).storage(storage).status.get()
+        lines = [
+            f"storage:  {st.get('storage', storage)}",
+            f"type:     {st.get('type', '?')}",
+            f"total:    {util.bytes_to_human_readable(st.get('total', 0))}",
+            f"used:     {util.bytes_to_human_readable(st.get('used', 0))} "
+            f"({util.decimaltopercentage(st.get('used', 0) / st.get('total', 1) if st.get('total') else 0)})",
+            f"avail:    {util.bytes_to_human_readable(st.get('avail', 0))}",
+            f"active:   {st.get('active', '?')}",
+            f"enabled:  {st.get('enabled', '?')}",
+        ]
+        return [types.TextContent(type="text", text="\n".join(lines))]
+
+    if name == "create_storage":
+        params = {k: v for k, v in arguments.items()}
+        # POST /storage — cluster-level storage definition.
+        proxmox.storage.post(**params)
+        return [types.TextContent(type="text", text=f"Storage '{arguments['storage']}' ({arguments['type']}) created.")]
+
+    if name == "delete_storage":
+        storage = arguments["storage"]
+        # DELETE /storage/{storage} — removes the config entry only.
+        proxmox.storage(storage).delete()
+        return [types.TextContent(type="text", text=f"Storage '{storage}' removed from configuration.")]
+
+    # ── Resource pool management ────────────────────────────────────────────────
+
+    if name == "create_pool":
+        params = {"poolid": arguments["poolid"]}
+        if "comment" in arguments:
+            params["comment"] = arguments["comment"]
+        proxmox.pools.post(**params)
+        return [types.TextContent(type="text", text=f"Pool '{arguments['poolid']}' created.")]
+
+    if name == "delete_pool":
+        proxmox.pools(arguments["poolid"]).delete()
+        return [types.TextContent(type="text", text=f"Pool '{arguments['poolid']}' deleted.")]
+
+    if name == "pool_add_member":
+        poolid = arguments["poolid"]
+        params = {}
+        if "vms" in arguments:
+            params["vms"] = arguments["vms"]
+        if "storage" in arguments:
+            params["storage"] = arguments["storage"]
+        proxmox.pools(poolid).put(**params)
+        return [types.TextContent(type="text", text=f"Members added to pool '{poolid}'.")]
+
+    if name == "pool_remove_member":
+        poolid = arguments["poolid"]
+        params = {"delete": 1}
+        if "vms" in arguments:
+            params["vms"] = arguments["vms"]
+        if "storage" in arguments:
+            params["storage"] = arguments["storage"]
+        proxmox.pools(poolid).put(**params)
+        return [types.TextContent(type="text", text=f"Members removed from pool '{poolid}'.")]
+
+    # ── Network management ──────────────────────────────────────────────────────
+
+    if name == "create_network":
+        node = arguments["node"]
+        params = {k: v for k, v in arguments.items() if k != "node"}
+        proxmox.nodes(node).network.post(**params)
+        return [types.TextContent(type="text", text=f"Network '{arguments['iface']}' staged on {node}. Run apply_network_config to activate.")]
+
+    if name == "delete_network":
+        node, iface = arguments["node"], arguments["iface"]
+        # DELETE /nodes/{node}/network/{iface} — removes from staged config.
+        proxmox.nodes(node).network(iface).delete()
+        return [types.TextContent(type="text", text=f"Network '{iface}' staged for removal on {node}. Run apply_network_config to activate.")]
+
+    if name == "apply_network_config":
+        node = arguments["node"]
+        # PUT /nodes/{node}/network — reloads interfaces (ifreload -a).
+        proxmox.nodes(node).network.put()
+        return [types.TextContent(type="text", text=f"Network configuration applied on {node}.")]
+
+    # ── Diagnostics ─────────────────────────────────────────────────────────────
+
+    if name == "node_smart":
+        node, disk = arguments["node"], arguments["disk"]
+        # GET /nodes/{node}/disks/smart?disk={path}
+        try:
+            data = proxmox.nodes(node).disks.smart.get(disk=disk)
+            health = data.get("health", "N/A")
+            attrs = data.get("attributes", []) or data.get("data", [])
+            lines = [f"disk:   {disk}", f"health: {health}"]
+            for a in attrs[:20]:    # cap at 20 attributes for readability
+                lines.append(
+                    f"  {a.get('name', a.get('id', '?'))}: "
+                    f"raw={a.get('raw', a.get('value', '?'))} "
+                    f"thresh={a.get('threshold', 'N/A')}"
+                )
+            return [types.TextContent(type="text", text="\n".join(lines))]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"S.M.A.R.T. error: {e}")]
+
+    if name == "cluster_health_summary":
+        lines = ["=== CLUSTER HEALTH SUMMARY ===\n"]
+
+        # Nodes
+        try:
+            nodes = proxmox.nodes.get()
+            lines.append("── Nodes ──")
+            for n in nodes:
+                status = n.get("status", "?")
+                flag = "✅" if status == "online" else "⚠️ "
+                lines.append(
+                    f"  {flag} {n['node']} | {status} | "
+                    f"CPU: {util.decimaltopercentage(n.get('cpu', 0))} | "
+                    f"Mem: {util.bytes_to_human_readable(n.get('mem', 0))}/{util.bytes_to_human_readable(n.get('maxmem', 0))}"
+                )
+        except Exception as e:
+            lines.append(f"  Nodes error: {e}")
+
+        # HA
+        try:
+            ha_items = proxmox.cluster.status.get()
+            quorate = next((i.get("quorate") for i in ha_items if i.get("type") == "cluster"), None)
+            flag = "✅" if quorate else "⚠️ "
+            lines.append(f"\n── Cluster ── {flag} quorate={quorate}")
+        except Exception as e:
+            lines.append(f"\n  HA/cluster error: {e}")
+
+        # Running tasks
+        try:
+            tasks = proxmox.cluster.tasks.get()
+            running = [t for t in tasks if t.get("status") == "running"]
+            flag = "⚠️ " if running else "✅"
+            lines.append(f"\n── Tasks ── {flag} {len(running)} running")
+            for t in running[:5]:
+                lines.append(f"  {t.get('node', '?')} | {t.get('type', '?')} | vmid={t.get('id', '?')}")
+        except Exception as e:
+            lines.append(f"\n  Tasks error: {e}")
+
+        # Ceph (optional)
+        try:
+            first_node = proxmox.nodes.get()[0]["node"]
+            ceph = proxmox.nodes(first_node).ceph.status.get()
+            health = ceph.get("health", {}).get("status", "N/A")
+            flag = "✅" if health == "HEALTH_OK" else "⚠️ "
+            lines.append(f"\n── Ceph ── {flag} {health}")
+        except Exception:
+            lines.append("\n── Ceph ── not configured or not accessible")
+
+        # Storage
+        try:
+            storages = proxmox.storage.get()
+            lines.append(f"\n── Storage ── {len(storages)} pool(s)")
+            for s in storages:
+                lines.append(f"  {s.get('storage', '?')} | type={s.get('type', '?')} | content={s.get('content', '?')}")
+        except Exception as e:
+            lines.append(f"\n  Storage error: {e}")
+
+        return [types.TextContent(type="text", text="\n".join(lines))]
+
+    if name == "node_top":
+        node = arguments["node"]
+        # GET /nodes/{node}/status — comprehensive node metrics snapshot.
+        st = proxmox.nodes(node).status.get()
+        cpu = st.get("cpu", 0)
+        mem = st.get("memory", {})
+        swap = st.get("swap", {})
+        disk = st.get("rootfs", {})
+        load = st.get("loadavg", [0, 0, 0])
+        ksm = st.get("ksm", {})
+        # Count running VMs and containers
+        try:
+            qemu_list = proxmox.nodes(node).qemu.get()
+            lxc_list = proxmox.nodes(node).lxc.get()
+            running_qemu = sum(1 for v in qemu_list if v.get("status") == "running")
+            running_lxc = sum(1 for v in lxc_list if v.get("status") == "running")
+        except Exception:
+            running_qemu = running_lxc = 0
+        lines = [
+            f"node:     {node}",
+            f"cpu:      {util.decimaltopercentage(cpu)}",
+            f"load:     {load[0]} / {load[1]} / {load[2]} (1m/5m/15m)",
+            f"memory:   {util.bytes_to_human_readable(mem.get('used', 0))}/{util.bytes_to_human_readable(mem.get('total', 0))} "
+            f"({util.decimaltopercentage(mem.get('used', 0) / mem.get('total', 1) if mem.get('total') else 0)})",
+            f"swap:     {util.bytes_to_human_readable(swap.get('used', 0))}/{util.bytes_to_human_readable(swap.get('total', 0))}",
+            f"rootfs:   {util.bytes_to_human_readable(disk.get('used', 0))}/{util.bytes_to_human_readable(disk.get('total', 0))}",
+            f"uptime:   {util.second_to_human_readable(st.get('uptime', 0))}",
+            f"vms:      {running_qemu} QEMU running / {len(qemu_list)} total",
+            f"cts:      {running_lxc} LXC running / {len(lxc_list)} total",
+        ]
+        if ksm:
+            lines.append(f"ksm:      shared={util.bytes_to_human_readable(ksm.get('shared', 0))}")
+        return [types.TextContent(type="text", text="\n".join(lines))]
+
+    # ── ACME / TLS ──────────────────────────────────────────────────────────────
+
+    if name == "list_acme_accounts":
+        try:
+            accounts = proxmox.cluster.acme.account.get()
+            lines = [f"{a.get('name', '?')} | {a.get('url', 'N/A')}" for a in accounts]
+            return [types.TextContent(type="text", text="\n".join(lines) or "No ACME accounts configured.")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"ACME error: {e}")]
+
+    if name == "renew_certificate":
+        node = arguments["node"]
+        force = 1 if arguments.get("force") else 0
+        try:
+            # POST /nodes/{node}/certificates/acme/certificate — triggers renewal.
+            # force=1 renews even if the certificate is not yet expiring.
+            result = proxmox.nodes(node).certificates.acme.certificate.post(force=force)
+            return [types.TextContent(type="text", text=f"Certificate renewal started: {result}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Certificate renewal error: {e}")]
+
+    # ── API token management ────────────────────────────────────────────────────
+
+    if name == "create_api_token":
+        userid = arguments["userid"]
+        tokenid = arguments["tokenid"]
+        params = {
+            "expire": arguments.get("expire", 0),
+            "privsep": arguments.get("privsep", 1),
+        }
+        if "comment" in arguments:
+            params["comment"] = arguments["comment"]
+        # POST /access/users/{userid}/token/{tokenid} — returns value (shown once only).
+        result = proxmox.access.users(userid).token(tokenid).post(**params)
+        secret = result.get("value", "N/A")
+        return [types.TextContent(type="text", text=(
+            f"Token created.\n"
+            f"full_tokenid: {userid}!{tokenid}\n"
+            f"secret:       {secret}\n"
+            "⚠️  The secret is shown only once. Store it immediately."
+        ))]
+
+    if name == "delete_api_token":
+        userid = arguments["userid"]
+        tokenid = arguments["tokenid"]
+        proxmox.access.users(userid).token(tokenid).delete()
+        return [types.TextContent(type="text", text=f"Token '{userid}!{tokenid}' deleted.")]
 
     raise ValueError(f"Unknown tool: {name}")
 

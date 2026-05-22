@@ -1,6 +1,6 @@
 # lordraw/proxmox-mcp
 
-**MCP server for Proxmox VE** — exposes 69 management tools over the [Model Context Protocol](https://modelcontextprotocol.io/) (stdio transport).
+**MCP server for Proxmox VE** — exposes 91 management tools over the [Model Context Protocol](https://modelcontextprotocol.io/) (stdio transport).
 
 Connect any MCP-compatible AI client (Claude Desktop, custom agents, …) to your Proxmox cluster and manage it in natural language.
 
@@ -8,7 +8,7 @@ Connect any MCP-compatible AI client (Claude Desktop, custom agents, …) to you
 
 ## What is this?
 
-`proxmox-mcp` is a lightweight MCP server that wraps the Proxmox VE REST API.  
+`proxmox-mcp` is a lightweight MCP server that wraps the Proxmox VE REST API with **91 tools**.  
 An AI agent or MCP client spawns this container, sends JSON-RPC tool calls over stdin/stdout, and gets structured results back — no HTTP port, no daemon, no persistent process.
 
 ```
@@ -94,7 +94,7 @@ PROXMOX_VERIFY_SSL=false
 
 ---
 
-## Available tools (69 total)
+## Available tools (91 total)
 
 | Category | Count | Tools |
 |---|---|---|
@@ -109,6 +109,7 @@ PROXMOX_VERIFY_SSL=false
 | **High Availability** | 3 | `cluster_status`, `ha_resources`, `ha_groups` |
 | **Ceph** | 4 | `ceph_status`, `ceph_health`, `ceph_osds`, `ceph_pools` |
 | **QEMU Guest Agent** | 3 | `vm_agent_exec`, `vm_agent_info`, `vm_agent_network` |
+| **LXC exec** | 1 | `lxc_exec` |
 | **Backup jobs** | 2 | `list_backup_jobs`, `prune_backups` |
 | **Replication** | 3 | `list_replication`, `create_replication`, `delete_replication` |
 | **Node — OS & system** | 8 | `node_apt_updates`, `node_syslog`, `node_dns`, `node_subscription`, `node_reboot`, `node_shutdown`, `node_apt_upgrade`, `node_certificates` |
@@ -117,6 +118,14 @@ PROXMOX_VERIFY_SSL=false
 | **Notifications** | 2 | `list_notification_endpoints`, `list_notification_matchers` |
 | **Console** | 1 | `vm_console_url` |
 | **Migration** | 1 | `vm_migrate` |
+| **Task management** | 2 | `wait_for_task`, `cancel_task` |
+| **VM/CT config write** | 2 | `vm_set_config`, `vm_set_cdrom` |
+| **Storage management** | 3 | `storage_status`, `create_storage`, `delete_storage` |
+| **Resource pools** | 4 | `create_pool`, `delete_pool`, `pool_add_member`, `pool_remove_member` |
+| **Network management** | 3 | `create_network`, `delete_network`, `apply_network_config` |
+| **Diagnostics** | 3 | `node_smart`, `cluster_health_summary`, `node_top` |
+| **ACME / TLS** | 2 | `list_acme_accounts`, `renew_certificate` |
+| **API tokens** | 2 | `create_api_token`, `delete_api_token` |
 
 ---
 
