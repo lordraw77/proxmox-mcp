@@ -99,6 +99,7 @@ async def ask(question: str) -> str:
                     max_iterations=MAX_ITERATIONS,
                     tool_timeout=TOOL_TIMEOUT,
                     extra_body={"options": {"num_ctx": 8192}},
+                    on_action=_on_action,
                 )
             except (
                 _openai_module.APITimeoutError,
@@ -113,16 +114,16 @@ async def ask(question: str) -> str:
     return _result  # type: ignore[return-value]
 
 
+def _on_action(name: str, args: dict) -> None:
+    import json
+    print(f"  [tool] {name}({json.dumps(args, ensure_ascii=False)})")
+
+
 async def main():
     _, model = llm.build_client("ollama")
 
-    print(
-        f"Proxmox Agent (Ollama)"
-        f" — model: {model}"
-        f" @ {OLLAMA_HOST}"
-        f" | timeout: {LLM_TIMEOUT:.0f}s"
-        f" | max_iter: {MAX_ITERATIONS}"
-    )
+    print(f"Proxmox AI Agent  |  provider=ollama  model={model}")
+    print(f"host={OLLAMA_HOST}  timeout={LLM_TIMEOUT:.0f}s  max_iter={MAX_ITERATIONS}")
 
     # Pre-flight Ollama connectivity check
     try:
@@ -140,11 +141,11 @@ async def main():
     except Exception as exc:
         print(f"[warning] Impossibile raggiungere Ollama su {OLLAMA_HOST}: {exc}")
 
-    print("Digita una domanda o 'exit' per uscire.\n")
+    print("Type your request, or 'exit' / Ctrl-C to quit.\n")
 
     while True:
         try:
-            question = input(">>> ").strip()
+            question = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break

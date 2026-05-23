@@ -124,7 +124,7 @@ def _on_thought(text: str) -> None:
     print()
 
 def _on_action(name: str, args: dict) -> None:
-    print(YELLOW("ACTION  › ") + BOLD(name) + DIM(f"  {json.dumps(args, ensure_ascii=False)}"))
+    print(YELLOW("ACTION  › ") + f"  [tool] {name}({json.dumps(args, ensure_ascii=False)})")
 
 def _on_observe(name: str, result: str) -> None:
     truncated = len(result) > 600
@@ -167,14 +167,13 @@ async def main() -> None:
     client, model = llm.build_client()
     provider = os.getenv("SRE_PROVIDER", "openrouter").strip().lower()
 
-    print(BOLD("Proxmox SRE Agent") +
-          f"  provider: {provider}  model: {model}  max-iter: {MAX_ITERATIONS}")
+    print(BOLD(f"Proxmox SRE Agent  |  provider={provider}  model={model}"))
     print(DIM("ReAct pattern — Thought / Action / Observation loop"))
-    print(DIM("Digita una domanda o 'exit' per uscire.\n"))
+    print(DIM("Type your request, or 'exit' / Ctrl-C to quit.\n"))
 
     while True:
         try:
-            question = input(GREEN("sre >>> ")).strip()
+            question = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break

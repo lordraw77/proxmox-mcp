@@ -45,6 +45,7 @@ async def ask(question: str) -> str:
             try:
                 _result = await llm.agentic_loop(
                     client=client, model=model, mcp=mcp, question=question,
+                    on_action=_on_action,
                 )
             except Exception as exc:
                 _error = exc
@@ -53,19 +54,19 @@ async def ask(question: str) -> str:
     return _result  # type: ignore[return-value]
 
 
+def _on_action(name: str, args: dict) -> None:
+    import json
+    print(f"  [tool] {name}({json.dumps(args, ensure_ascii=False)})")
+
+
 async def main():
     _, model = llm.build_client("openrouter")
-    use_docker = os.getenv("MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
-    backend = (
-        f"docker ({os.getenv('MCP_DOCKER_IMAGE', 'proxmox-mcp:latest')})"
-        if use_docker else "local venv"
-    )
-    print(f"Proxmox Agent — model: {model} | backend: {backend}")
-    print("Type a question or 'exit' to quit.\n")
+    print(f"Proxmox AI Agent  |  provider=openrouter  model={model}")
+    print("Type your request, or 'exit' / Ctrl-C to quit.\n")
 
     while True:
         try:
-            question = input(">>> ").strip()
+            question = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
