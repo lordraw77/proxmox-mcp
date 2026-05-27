@@ -105,13 +105,13 @@ Authentication
   credentials are present.
 
   Password auth (basic):
-    PROXMOX_USER        — API user including realm, e.g. root@pam
-    PROXMOX_PASSWORD    — account password
+    PROXMOX_MCP_USER        — API user including realm, e.g. root@pam
+    PROXMOX_MCP_PASSWORD    — account password
 
   Token auth (recommended for automation):
-    PROXMOX_USER        — API user that owns the token, e.g. root@pam
-    PROXMOX_TOKEN_ID    — token name as shown in the Proxmox UI, e.g. mytoken
-    PROXMOX_TOKEN_SECRET — token UUID value (shown once at token creation)
+    PROXMOX_MCP_USER        — API user that owns the token, e.g. root@pam
+    PROXMOX_MCP_TOKEN_ID    — token name as shown in the Proxmox UI, e.g. mytoken
+    PROXMOX_MCP_TOKEN_SECRET — token UUID value (shown once at token creation)
 
   Tokens are scoped, non-expiring by default, and do not require storing
   a user password.  Create one at Datacenter → Permissions → API Tokens.
@@ -119,13 +119,13 @@ Authentication
 
 Environment variables (via .env)
 ---------------------------------
-  PROXMOX_HOST           — hostname or IP of the Proxmox VE node
-  PROXMOX_PORT           — API port (default 8006)
-  PROXMOX_USER           — API user including realm (required for both auth modes)
-  PROXMOX_PASSWORD       — password (password auth only)
-  PROXMOX_TOKEN_ID       — token name (token auth only)
-  PROXMOX_TOKEN_SECRET   — token UUID secret (token auth only)
-  PROXMOX_VERIFY_SSL     — true/false, whether to verify TLS certificates (default false)
+  PROXMOX_MCP_HOST           — hostname or IP of the Proxmox VE node
+  PROXMOX_MCP_PORT           — API port (default 8006)
+  PROXMOX_MCP_USER           — API user including realm (required for both auth modes)
+  PROXMOX_MCP_PASSWORD       — password (password auth only)
+  PROXMOX_MCP_TOKEN_ID       — token name (token auth only)
+  PROXMOX_MCP_TOKEN_SECRET   — token UUID secret (token auth only)
+  PROXMOX_MCP_VERIFY_SSL     — true/false, whether to verify TLS certificates (default false)
 """
 
 import os
@@ -147,30 +147,30 @@ load_dotenv()
 def _build_proxmox_client() -> ProxmoxAPI:
     """
     Build and return a ProxmoxAPI session using the credentials from the
-    environment.  Token authentication is used when PROXMOX_TOKEN_ID and
-    PROXMOX_TOKEN_SECRET are both present; otherwise password authentication
+    environment.  Token authentication is used when PROXMOX_MCP_TOKEN_ID and
+    PROXMOX_MCP_TOKEN_SECRET are both present; otherwise password authentication
     is used.
 
     Raises:
         EnvironmentError: if required variables are missing or the chosen
                           auth mode lacks its mandatory fields.
     """
-    host = os.getenv("PROXMOX_HOST")
-    port = os.getenv("PROXMOX_PORT", "8006")
-    user = os.getenv("PROXMOX_USER")
+    host = os.getenv("PROXMOX_MCP_HOST")
+    port = os.getenv("PROXMOX_MCP_PORT", "8006")
+    user = os.getenv("PROXMOX_MCP_USER")
 
     if not host:
-        raise EnvironmentError("PROXMOX_HOST is not set.")
+        raise EnvironmentError("PROXMOX_MCP_HOST is not set.")
     if not user:
-        raise EnvironmentError("PROXMOX_USER is not set.")
+        raise EnvironmentError("PROXMOX_MCP_USER is not set.")
 
-    # Parse PROXMOX_VERIFY_SSL — accepts "true"/"1"/"yes" (case-insensitive).
+    # Parse PROXMOX_MCP_VERIFY_SSL — accepts "true"/"1"/"yes" (case-insensitive).
     # Defaults to False because most Proxmox installs use self-signed certs.
-    verify_ssl_raw = os.getenv("PROXMOX_VERIFY_SSL", "false").strip().lower()
+    verify_ssl_raw = os.getenv("PROXMOX_MCP_VERIFY_SSL", "false").strip().lower()
     verify_ssl = verify_ssl_raw in ("true", "1", "yes")
 
-    token_id = os.getenv("PROXMOX_TOKEN_ID", "").strip()
-    token_secret = os.getenv("PROXMOX_TOKEN_SECRET", "").strip()
+    token_id = os.getenv("PROXMOX_MCP_TOKEN_ID", "").strip()
+    token_secret = os.getenv("PROXMOX_MCP_TOKEN_SECRET", "").strip()
 
     if token_id and token_secret:
         # Token authentication — does not require the user password.
@@ -187,12 +187,12 @@ def _build_proxmox_client() -> ProxmoxAPI:
         )
 
     # Fall back to password authentication.
-    password = os.getenv("PROXMOX_PASSWORD", "").strip()
+    password = os.getenv("PROXMOX_MCP_PASSWORD", "").strip()
     if not password:
         raise EnvironmentError(
             "No valid credentials found.  Set either "
-            "PROXMOX_TOKEN_ID + PROXMOX_TOKEN_SECRET (recommended) "
-            "or PROXMOX_PASSWORD."
+            "PROXMOX_MCP_TOKEN_ID + PROXMOX_MCP_TOKEN_SECRET (recommended) "
+            "or PROXMOX_MCP_PASSWORD."
         )
     return ProxmoxAPI(
         host,
@@ -2380,8 +2380,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     if name == "vm_console_url":
         node, vmid, vm_type = arguments["node"], arguments["vmid"], arguments["type"]
-        host = os.getenv("PROXMOX_HOST", "localhost")
-        port_str = os.getenv("PROXMOX_PORT", "8006")
+        host = os.getenv("PROXMOX_MCP_HOST", "localhost")
+        port_str = os.getenv("PROXMOX_MCP_PORT", "8006")
         try:
             # POST /nodes/{node}/{type}/{vmid}/vncproxy — obtain a VNC ticket and port.
             # websocket=1 requests a WebSocket-compatible ticket for noVNC.

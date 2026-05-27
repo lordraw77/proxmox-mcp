@@ -5,11 +5,11 @@ Agentic loop via OpenRouter.  Provider logic lives in llm.py.
 
 Environment variables
 ---------------------
-  OPENROUTER_API_KEY   — required
-  OPENROUTER_MODEL     — model string (default: openrouter/auto)
-  MCP_USE_DOCKER       — "true" to spawn server.py in a container
-  MCP_DOCKER_IMAGE     — Docker image (default: proxmox-mcp:latest)
-  MCP_ENV_FILE         — .env path forwarded to the container
+  PROXMOX_MCP_OPENROUTER_API_KEY   — required
+  PROXMOX_MCP_OPENROUTER_MODEL     — model string (default: openrouter/auto)
+  PROXMOX_MCP_USE_DOCKER           — "true" to spawn server.py in a container
+  PROXMOX_MCP_DOCKER_IMAGE         — Docker image (default: lordraw/proxmox-mcp:latest)
+  PROXMOX_MCP_ENV_FILE             — .env path forwarded to the container
 
 Usage
 -----
@@ -61,7 +61,9 @@ def _on_action(name: str, args: dict) -> None:
 
 async def main():
     _, model = llm.build_client("openrouter")
-    print(f"Proxmox AI Agent  |  provider=openrouter  model={model}")
+    use_docker = os.getenv("PROXMOX_MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
+    mcp_backend = f"docker({os.getenv('PROXMOX_MCP_DOCKER_IMAGE', 'lordraw/proxmox-mcp:latest')})" if use_docker else "local"
+    print(f"Proxmox AI Agent  |  provider=openrouter  model={model}  mcp={mcp_backend}")
     print("Type your request, or 'exit' / Ctrl-C to quit.\n")
 
     while True:

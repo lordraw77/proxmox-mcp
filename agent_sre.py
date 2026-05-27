@@ -19,22 +19,22 @@ Persona SRE
 
 Environment variables
 ---------------------
-  SRE_PROVIDER        — provider attivo (default: openrouter)
-                        openrouter | groq | gemini | cloudflare | cerebras | mistral
-  SRE_MAX_ITERATIONS  — max iterazioni ReAct (default: 20)
+  PROXMOX_MCP_PROVIDER        — provider attivo (default: openrouter)
+                                 openrouter | groq | gemini | cloudflare | cerebras | mistral
+  PROXMOX_MCP_SRE_MAX_ITERATIONS — max iterazioni ReAct (default: 20)
   + variabili del provider selezionato (vedi llm.py e .env.example)
-  MCP_USE_DOCKER      — "true" per usare server.py in container
-  MCP_DOCKER_IMAGE    — immagine Docker (default: proxmox-mcp:latest)
-  MCP_ENV_FILE        — path .env forwarded al container
+  PROXMOX_MCP_USE_DOCKER      — "true" per usare server.py in container
+  PROXMOX_MCP_DOCKER_IMAGE    — immagine Docker (default: lordraw/proxmox-mcp:latest)
+  PROXMOX_MCP_ENV_FILE        — path .env forwarded al container
 
 Usage
 -----
   cd /opt/proxmox-mcp
   .venv/bin/python agent_sre.py
 
-  sre >>> Il cluster è sano?
-  sre >>> La VM 105 non risponde, indaga
-  sre >>> exit
+  Il cluster è sano?
+  La VM 105 non risponde, indaga
+  exit
 """
 
 import asyncio
@@ -50,7 +50,7 @@ import llm
 
 dotenv.load_dotenv()
 
-MAX_ITERATIONS = int(os.getenv("SRE_MAX_ITERATIONS", "20"))
+MAX_ITERATIONS = int(os.getenv("PROXMOX_MCP_SRE_MAX_ITERATIONS", "20"))
 
 # ── ANSI colours (disabled when not a tty) ───────────────────────────────────
 
@@ -165,9 +165,11 @@ async def ask(question: str, client, model: str) -> str:
 
 async def main() -> None:
     client, model = llm.build_client()
-    provider = os.getenv("SRE_PROVIDER", "openrouter").strip().lower()
+    provider = os.getenv("PROXMOX_MCP_PROVIDER", "openrouter").strip().lower()
 
-    print(BOLD(f"Proxmox SRE Agent  |  provider={provider}  model={model}"))
+    use_docker = os.getenv("PROXMOX_MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
+    mcp_backend = f"docker({os.getenv('PROXMOX_MCP_DOCKER_IMAGE', 'lordraw/proxmox-mcp:latest')})" if use_docker else "local"
+    print(BOLD(f"Proxmox SRE Agent  |  provider={provider}  model={model}  mcp={mcp_backend}"))
     print(DIM("ReAct pattern — Thought / Action / Observation loop"))
     print(DIM("Type your request, or 'exit' / Ctrl-C to quit.\n"))
 

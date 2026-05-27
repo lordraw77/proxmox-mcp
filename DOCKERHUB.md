@@ -62,33 +62,33 @@ Pass credentials via `--env-file` or individual `-e` flags. **Never bake secrets
 ### Token auth (recommended)
 
 ```dotenv
-PROXMOX_HOST=192.168.1.10
-PROXMOX_PORT=8006
-PROXMOX_USER=root@pam
-PROXMOX_TOKEN_ID=mytoken
-PROXMOX_TOKEN_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-PROXMOX_VERIFY_SSL=false
+PROXMOX_MCP_HOST=192.168.1.10
+PROXMOX_MCP_PORT=8006
+PROXMOX_MCP_USER=root@pam
+PROXMOX_MCP_TOKEN_ID=mytoken
+PROXMOX_MCP_TOKEN_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+PROXMOX_MCP_VERIFY_SSL=false
 ```
 
 ### Password auth
 
 ```dotenv
-PROXMOX_HOST=192.168.1.10
-PROXMOX_PORT=8006
-PROXMOX_USER=root@pam
-PROXMOX_PASSWORD=your_password
-PROXMOX_VERIFY_SSL=false
+PROXMOX_MCP_HOST=192.168.1.10
+PROXMOX_MCP_PORT=8006
+PROXMOX_MCP_USER=root@pam
+PROXMOX_MCP_PASSWORD=your_password
+PROXMOX_MCP_VERIFY_SSL=false
 ```
 
 | Variable | Required | Description |
 |---|---|---|
-| `PROXMOX_HOST` | ✅ | Proxmox VE host IP or hostname |
-| `PROXMOX_PORT` | — | API port (default: `8006`) |
-| `PROXMOX_USER` | ✅ | User with realm, e.g. `root@pam` |
-| `PROXMOX_TOKEN_ID` | ✅* | API token name (*token auth*) |
-| `PROXMOX_TOKEN_SECRET` | ✅* | API token secret UUID (*token auth*) |
-| `PROXMOX_PASSWORD` | ✅* | Account password (*password auth*) |
-| `PROXMOX_VERIFY_SSL` | — | Verify TLS cert (default: `false`) |
+| `PROXMOX_MCP_HOST` | ✅ | Proxmox VE host IP or hostname |
+| `PROXMOX_MCP_PORT` | — | API port (default: `8006`) |
+| `PROXMOX_MCP_USER` | ✅ | User with realm, e.g. `root@pam` |
+| `PROXMOX_MCP_TOKEN_ID` | ✅* | API token name (*token auth*) |
+| `PROXMOX_MCP_TOKEN_SECRET` | ✅* | API token secret UUID (*token auth*) |
+| `PROXMOX_MCP_PASSWORD` | ✅* | Account password (*password auth*) |
+| `PROXMOX_MCP_VERIFY_SSL` | — | Verify TLS cert (default: `false`) |
 
 \* Token auth takes priority when both are present.
 

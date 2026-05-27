@@ -19,14 +19,14 @@ Tool calling support
 
 Environment variables
 ---------------------
-  OLLAMA_HOST            — Ollama base URL (default: http://localhost:11434)
-  OLLAMA_MODEL           — model to use (default: qwen2.5:7b-instruct)
-  OLLAMA_TIMEOUT         — seconds to wait for each LLM response (default: 120)
-  OLLAMA_TOOL_TIMEOUT    — seconds to wait for each MCP tool call (default: 30)
-  OLLAMA_MAX_ITERATIONS  — max tool-call rounds per question (default: 10)
-  MCP_USE_DOCKER         — "true" to spawn server.py inside Docker
-  MCP_DOCKER_IMAGE       — image name (default: proxmox-mcp:latest)
-  MCP_ENV_FILE           — path to .env forwarded to the container
+  PROXMOX_MCP_OLLAMA_HOST            — Ollama base URL (default: http://localhost:11434)
+  PROXMOX_MCP_OLLAMA_MODEL           — model to use (default: qwen2.5:7b-instruct)
+  PROXMOX_MCP_OLLAMA_TIMEOUT         — seconds to wait for each LLM response (default: 120)
+  PROXMOX_MCP_OLLAMA_TOOL_TIMEOUT    — seconds to wait for each MCP tool call (default: 30)
+  PROXMOX_MCP_OLLAMA_MAX_ITERATIONS  — max tool-call rounds per question (default: 10)
+  PROXMOX_MCP_USE_DOCKER             — "true" to spawn server.py inside Docker
+  PROXMOX_MCP_DOCKER_IMAGE           — image name (default: lordraw/proxmox-mcp:latest)
+  PROXMOX_MCP_ENV_FILE               — path to .env forwarded to the container
 
 Usage
 -----
@@ -47,10 +47,10 @@ import llm
 
 dotenv.load_dotenv()
 
-OLLAMA_HOST    = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
-LLM_TIMEOUT    = float(os.getenv("OLLAMA_TIMEOUT",       "120"))
-TOOL_TIMEOUT   = float(os.getenv("OLLAMA_TOOL_TIMEOUT",  "30"))
-MAX_ITERATIONS = int(os.getenv("OLLAMA_MAX_ITERATIONS",   "10"))
+OLLAMA_HOST    = os.getenv("PROXMOX_MCP_OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+LLM_TIMEOUT    = float(os.getenv("PROXMOX_MCP_OLLAMA_TIMEOUT",       "120"))
+TOOL_TIMEOUT   = float(os.getenv("PROXMOX_MCP_OLLAMA_TOOL_TIMEOUT",  "30"))
+MAX_ITERATIONS = int(os.getenv("PROXMOX_MCP_OLLAMA_MAX_ITERATIONS",   "10"))
 
 SERVER_PARAMS = llm.build_mcp_server_params()
 
@@ -122,7 +122,9 @@ def _on_action(name: str, args: dict) -> None:
 async def main():
     _, model = llm.build_client("ollama")
 
-    print(f"Proxmox AI Agent  |  provider=ollama  model={model}")
+    use_docker = os.getenv("PROXMOX_MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
+    mcp_backend = f"docker({os.getenv('PROXMOX_MCP_DOCKER_IMAGE', 'lordraw/proxmox-mcp:latest')})" if use_docker else "local"
+    print(f"Proxmox AI Agent  |  provider=ollama  model={model}  mcp={mcp_backend}")
     print(f"host={OLLAMA_HOST}  timeout={LLM_TIMEOUT:.0f}s  max_iter={MAX_ITERATIONS}")
 
     # Pre-flight Ollama connectivity check

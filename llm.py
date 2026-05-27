@@ -32,44 +32,44 @@ dotenv.load_dotenv()
 PROVIDERS: dict[str, tuple[str, str, str, str]] = {
     "openrouter": (
         "https://openrouter.ai/api/v1",
-        "OPENROUTER_API_KEY",
-        "OPENROUTER_MODEL",
+        "PROXMOX_MCP_OPENROUTER_API_KEY",
+        "PROXMOX_MCP_OPENROUTER_MODEL",
         "openrouter/auto",
     ),
     "groq": (
         "https://api.groq.com/openai/v1",
-        "GROQ_API_KEY",
-        "GROQ_MODEL",
+        "PROXMOX_MCP_GROQ_API_KEY",
+        "PROXMOX_MCP_GROQ_MODEL",
         "llama-3.3-70b-versatile",
     ),
     "gemini": (
         "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "GEMINI_API_KEY",
-        "GEMINI_MODEL",
+        "PROXMOX_MCP_GEMINI_API_KEY",
+        "PROXMOX_MCP_GEMINI_MODEL",
         "gemini-2.0-flash",
     ),
     "cloudflare": (
         "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
-        "CLOUDFLARE_API_KEY",
-        "CLOUDFLARE_MODEL",
+        "PROXMOX_MCP_CLOUDFLARE_API_KEY",
+        "PROXMOX_MCP_CLOUDFLARE_MODEL",
         "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     ),
     "cerebras": (
         "https://api.cerebras.ai/v1",
-        "CEREBRAS_API_KEY",
-        "CEREBRAS_MODEL",
+        "PROXMOX_MCP_CEREBRAS_API_KEY",
+        "PROXMOX_MCP_CEREBRAS_MODEL",
         "llama-3.3-70b",
     ),
     "mistral": (
         "https://api.mistral.ai/v1",
-        "MISTRAL_API_KEY",
-        "MISTRAL_MODEL",
+        "PROXMOX_MCP_MISTRAL_API_KEY",
+        "PROXMOX_MCP_MISTRAL_MODEL",
         "mistral-large-latest",
     ),
     "ollama": (
         "{ollama_host}/v1",
         "",               # key not used — Ollama ignores it
-        "OLLAMA_MODEL",
+        "PROXMOX_MCP_OLLAMA_MODEL",
         "qwen2.5:7b-instruct",
     ),
 }
@@ -88,7 +88,7 @@ def build_client(
     Calls sys.exit() with a clear message if a required env var is missing.
     """
     if provider is None:
-        provider = os.getenv("SRE_PROVIDER", "openrouter").strip().lower()
+        provider = os.getenv("PROXMOX_MCP_PROVIDER", "openrouter").strip().lower()
 
     if provider not in PROVIDERS:
         sys.exit(
@@ -99,13 +99,13 @@ def build_client(
     base_url_tpl, key_env, model_env, default_model = PROVIDERS[provider]
 
     if provider == "ollama":
-        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+        ollama_host = os.getenv("PROXMOX_MCP_OLLAMA_HOST", "http://localhost:11434").rstrip("/")
         base_url    = base_url_tpl.format(ollama_host=ollama_host)
         api_key     = "ollama"
     elif provider == "cloudflare":
         api_key    = os.getenv(key_env) or sys.exit(f"ERROR: {key_env} is not set.")
-        account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID") or sys.exit(
-            "ERROR: CLOUDFLARE_ACCOUNT_ID is not set."
+        account_id = os.getenv("PROXMOX_MCP_CLOUDFLARE_ACCOUNT_ID") or sys.exit(
+            "ERROR: PROXMOX_MCP_CLOUDFLARE_ACCOUNT_ID is not set."
         )
         base_url = base_url_tpl.format(account_id=account_id)
     else:
@@ -123,14 +123,14 @@ def build_client(
 
 def build_mcp_server_params() -> StdioServerParameters:
     """Return StdioServerParameters to spawn server.py (local venv or Docker)."""
-    use_docker = os.getenv("MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
+    use_docker = os.getenv("PROXMOX_MCP_USE_DOCKER", "false").strip().lower() in ("true", "1", "yes")
     if use_docker:
-        image    = os.getenv("MCP_DOCKER_IMAGE", "proxmox-mcp:latest")
-        env_file = os.path.abspath(os.getenv("MCP_ENV_FILE", ".env"))
+        image    = os.getenv("PROXMOX_MCP_DOCKER_IMAGE", "lordraw/proxmox-mcp:latest")
+        env_file = os.path.abspath(os.getenv("PROXMOX_MCP_ENV_FILE", ".env"))
         return StdioServerParameters(
             command="docker",
             args=["run", "--rm", "-i", "--env-file", env_file, image],
-            env={},
+            env={**os.environ},
         )
     return StdioServerParameters(
         command=str(os.path.abspath(".venv/bin/python")),

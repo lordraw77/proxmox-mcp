@@ -78,16 +78,16 @@ expose the account password and can be scoped to specific privileges.
 
 ```dotenv
 # Proxmox VE — token auth
-PROXMOX_HOST=192.168.1.10
-PROXMOX_PORT=8006
-PROXMOX_USER=root@pam             # user that owns the token (realm required)
-PROXMOX_TOKEN_ID=mytoken          # token name shown in the Proxmox UI
-PROXMOX_TOKEN_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx   # UUID shown at creation
-PROXMOX_VERIFY_SSL=false          # true if your node has a valid TLS certificate
+PROXMOX_MCP_HOST=192.168.1.10
+PROXMOX_MCP_PORT=8006
+PROXMOX_MCP_USER=root@pam             # user that owns the token (realm required)
+PROXMOX_MCP_TOKEN_ID=mytoken          # token name shown in the Proxmox UI
+PROXMOX_MCP_TOKEN_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx   # UUID shown at creation
+PROXMOX_MCP_VERIFY_SSL=false          # true if your node has a valid TLS certificate
 
 # OpenRouter
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=anthropic/claude-opus-4.5
+PROXMOX_MCP_OPENROUTER_API_KEY=sk-or-...
+PROXMOX_MCP_OPENROUTER_MODEL=anthropic/claude-haiku-4-5
 ```
 
 **How to create a token in Proxmox:**
@@ -100,19 +100,19 @@ OPENROUTER_MODEL=anthropic/claude-opus-4.5
 
 ```dotenv
 # Proxmox VE — password auth
-PROXMOX_HOST=192.168.1.10
-PROXMOX_PORT=8006
-PROXMOX_USER=root@pam
-PROXMOX_PASSWORD=your_password
-PROXMOX_VERIFY_SSL=false
+PROXMOX_MCP_HOST=192.168.1.10
+PROXMOX_MCP_PORT=8006
+PROXMOX_MCP_USER=root@pam
+PROXMOX_MCP_PASSWORD=your_password
+PROXMOX_MCP_VERIFY_SSL=false
 
 # OpenRouter
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=anthropic/claude-opus-4.5
+PROXMOX_MCP_OPENROUTER_API_KEY=sk-or-...
+PROXMOX_MCP_OPENROUTER_MODEL=anthropic/claude-haiku-4-5
 ```
 
-> **Auth priority** — if `PROXMOX_TOKEN_ID` and `PROXMOX_TOKEN_SECRET` are
-> both set, token auth is used and `PROXMOX_PASSWORD` is ignored.
+> **Auth priority** — if `PROXMOX_MCP_TOKEN_ID` and `PROXMOX_MCP_TOKEN_SECRET` are
+> both set, token auth is used and `PROXMOX_MCP_PASSWORD` is ignored.
 
 > **TLS** — set `PROXMOX_VERIFY_SSL=true` only if your Proxmox node has a
 > certificate signed by a trusted CA.  Most homelab setups use self-signed
@@ -142,25 +142,25 @@ cd /opt/proxmox-mcp
 ```
 
 ```
-Proxmox Agent — model: anthropic/claude-opus-4.5 | backend: local venv
-Type a question or 'exit' to quit.
+Proxmox AI Agent  |  provider=openrouter  model=anthropic/claude-haiku-4-5
+Type your request, or 'exit' / Ctrl-C to quit.
 
->>> How many nodes are in the cluster?
->>> List all running VMs on node pve
->>> Show me the CPU history of node pve for the last day
->>> Clone VM 100 on node pve to ID 200
->>> Take a snapshot of VM 100 on node pve named before-update
->>> exit
+You: How many nodes are in the cluster?
+You: List all running VMs on node pve
+You: Show me the CPU history of node pve for the last day
+You: Clone VM 100 on node pve to ID 200
+You: Take a snapshot of VM 100 on node pve named before-update
+You: exit
 ```
 
 ### Docker backend
 
 ```bash
-# Build the server image
-docker build -t proxmox-mcp:latest .
+# Pull the published MCP server image
+docker pull lordraw/proxmox-mcp:latest
 
 # Run agent.py but spawn server.py inside Docker
-MCP_USE_DOCKER=true .venv/bin/python agent.py
+PROXMOX_MCP_USE_DOCKER=true .venv/bin/python agent.py
 
 # Fully containerised (agent + server in one image)
 docker build -f Dockerfile.agent -t proxmox-mcp-agent:latest .
@@ -207,8 +207,8 @@ ollama pull qwen2.5:7b-instruct
 
 ```dotenv
 # .env
-OLLAMA_HOST=http://192.168.0.140:11434
-OLLAMA_MODEL=qwen2.5:7b-instruct
+PROXMOX_MCP_OLLAMA_HOST=http://192.168.0.140:11434
+PROXMOX_MCP_OLLAMA_MODEL=qwen2.5:7b-instruct
 ```
 
 ```bash
@@ -228,7 +228,7 @@ docker run --rm -it --env-file .env proxmox-mcp-ollama:latest
 docker run --rm -it \
   --env-file .env \
   --add-host=host.docker.internal:host-gateway \
-  -e OLLAMA_HOST=http://host.docker.internal:11434 \
+  -e PROXMOX_MCP_OLLAMA_HOST=http://host.docker.internal:11434 \
   proxmox-mcp-ollama:latest
 ```
 
@@ -246,10 +246,10 @@ docker compose --profile ollama run --rm agent-ollama
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama base URL |
-| `OLLAMA_MODEL` | `qwen2.5:7b-instruct` | Model to use |
-| `MCP_USE_DOCKER` | `false` | Spawn MCP server in Docker |
-| `MCP_DOCKER_IMAGE` | `proxmox-mcp:latest` | Docker image for MCP server |
+| `PROXMOX_MCP_OLLAMA_HOST` | `http://localhost:11434` | Ollama base URL |
+| `PROXMOX_MCP_OLLAMA_MODEL` | `qwen2.5:7b-instruct` | Model to use |
+| `PROXMOX_MCP_USE_DOCKER` | `false` | Spawn MCP server in Docker |
+| `PROXMOX_MCP_DOCKER_IMAGE` | `lordraw/proxmox-mcp:latest` | Docker image for MCP server |
 
 ---
 
@@ -589,10 +589,10 @@ but **not** carried across separate questions.
 ### OpenRouter (agent.py)
 
 ```dotenv
-OPENROUTER_MODEL=anthropic/claude-haiku-4-5    # fast, inexpensive
-OPENROUTER_MODEL=anthropic/claude-opus-4.5     # balanced — recommended
-OPENROUTER_MODEL=google/gemini-2.5-pro         # Google alternative
-OPENROUTER_MODEL=openrouter/free               # free tier
+PROXMOX_MCP_OPENROUTER_MODEL=anthropic/claude-haiku-4-5    # fast, inexpensive
+PROXMOX_MCP_OPENROUTER_MODEL=anthropic/claude-opus-4.5     # balanced — recommended
+PROXMOX_MCP_OPENROUTER_MODEL=google/gemini-2.5-pro         # Google alternative
+PROXMOX_MCP_OPENROUTER_MODEL=openrouter/free               # free tier
 ```
 
 ### Ollama (agent_ollama.py)
@@ -604,9 +604,9 @@ ollama pull llama3.2:3b           # lighter, for low-memory machines
 ```
 
 ```dotenv
-OLLAMA_HOST=http://localhost:11434          # local Ollama
-OLLAMA_HOST=http://192.168.0.140:11434     # remote Ollama on LAN
-OLLAMA_MODEL=qwen2.5:7b-instruct
+PROXMOX_MCP_OLLAMA_HOST=http://localhost:11434          # local Ollama
+PROXMOX_MCP_OLLAMA_HOST=http://192.168.0.140:11434     # remote Ollama on LAN
+PROXMOX_MCP_OLLAMA_MODEL=qwen2.5:7b-instruct
 ```
 
 ---

@@ -5,11 +5,11 @@ from proxmoxer import ProxmoxAPI
 import util
 import json
 load_dotenv()
-PROXMOX_HOST = os.getenv("PROXMOX_HOST")
-PROXMOX_PORT = os.getenv("PROXMOX_PORT")
-PROXMOX_USER = os.getenv("PROXMOX_USER")
-PROXMOX_PASSWORD = os.getenv("PROXMOX_PASSWORD")
-PROXMOX_VERIFY_SSL = os.getenv("PROXMOX_VERIFY_SSL").lower()
+PROXMOX_HOST = os.getenv("PROXMOX_MCP_HOST")
+PROXMOX_PORT = os.getenv("PROXMOX_MCP_PORT")
+PROXMOX_USER = os.getenv("PROXMOX_MCP_USER")
+PROXMOX_PASSWORD = os.getenv("PROXMOX_MCP_PASSWORD")
+PROXMOX_VERIFY_SSL = os.getenv("PROXMOX_MCP_VERIFY_SSL").lower()
 
 proxmox = ProxmoxAPI(
     PROXMOX_HOST, port=PROXMOX_PORT, user=PROXMOX_USER, password=PROXMOX_PASSWORD, verify_ssl=False
