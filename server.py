@@ -2730,7 +2730,7 @@ async def _run_stdio():
         )
 
 
-def _run_sse(host: str, port: int):
+async def _run_sse(host: str, port: int):
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
     from starlette.routing import Mount, Route
@@ -2750,7 +2750,8 @@ def _run_sse(host: str, port: int):
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages/", app=sse.handle_post_message),
     ])
-    uvicorn.run(app, host=host, port=port)
+    config = uvicorn.Config(app, host=host, port=port)
+    await uvicorn.Server(config).serve()
 
 
 async def main():
@@ -2759,14 +2760,14 @@ async def main():
         "--transport",
         choices=["stdio", "sse"],
         default=os.getenv("PROXMOX_MCP_TRANSPORT", "stdio"),
-        help="Transport type — overrides MCP_TRANSPORT env var (default: stdio)",
+        help="Transport type — overrides PROXMOX_MCP_TRANSPORT env var (default: stdio)",
     )
     parser.add_argument("--host", default=os.getenv("PROXMOX_MCP_SSE_HOST", "0.0.0.0"), help="SSE bind host")
     parser.add_argument("--port", type=int, default=int(os.getenv("PROXMOX_MCP_SSE_PORT", "8080")), help="SSE bind port")
     args = parser.parse_args()
 
     if args.transport == "sse":
-        _run_sse(args.host, args.port)
+        await _run_sse(args.host, args.port)
     else:
         await _run_stdio()
 

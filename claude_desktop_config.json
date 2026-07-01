@@ -1,9 +1,14 @@
 {
   "mcpServers": {
-    "proxmox": {
+    "proxmox-stdio": {
       "command": "/opt/proxmox-mcp/.venv/bin/python",
       "args": ["/opt/proxmox-mcp/server.py"],
-      "env": {}
+      "env": {
+        "PROXMOX_MCP_TRANSPORT": "stdio"
+      }
+    },
+    "proxmox-sse": {
+      "url": "http://localhost:8080/sse"
     }
   }
 }
