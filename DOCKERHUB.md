@@ -8,11 +8,18 @@ Connect any MCP-compatible AI client (Claude Desktop, custom agents, …) to you
 
 ## What is this?
 
-`proxmox-mcp` is a lightweight MCP server that wraps the Proxmox VE REST API with **91 tools**.  
-An AI agent or MCP client spawns this container, sends JSON-RPC tool calls over stdin/stdout, and gets structured results back — no HTTP port, no daemon, no persistent process.
+`proxmox-mcp` is a lightweight MCP server that wraps the Proxmox VE REST API with **91 tools**.
+It supports three transports, selected with `PROXMOX_MCP_TRANSPORT`:
+
+| Transport | Value | Endpoint | Status |
+|---|---|---|---|
+| Standard I/O | `stdio` (default) | — | current — client spawns the container |
+| Streamable HTTP | `streamable-http` | `/mcp` | current — recommended for remote/long-running use |
+| HTTP + SSE | `sse` | `/sse` | deprecated in the MCP spec, kept for backward compatibility |
 
 ```
-AI client  ──stdin/stdout──►  lordraw/proxmox-mcp  ──HTTPS:8006──►  Proxmox VE
+AI client  ──stdin/stdout──────►  lordraw/proxmox-mcp  ──HTTPS:8006──►  Proxmox VE
+AI client  ──HTTP :8080/mcp────►  lordraw/proxmox-mcp  ──HTTPS:8006──►  Proxmox VE
 ```
 
 ---
@@ -37,6 +44,26 @@ Add to `claude_desktop_config.json`:
   }
 }
 ```
+
+### Streamable HTTP (long-running container)
+
+```bash
+docker run -d --name proxmox-mcp --env-file .env \
+  -e PROXMOX_MCP_TRANSPORT=streamable-http -p 127.0.0.1:8080:8080 \
+  lordraw/proxmox-mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "proxmox": { "type": "http", "url": "http://localhost:8080/mcp" }
+  }
+}
+```
+
+Legacy SSE: use `PROXMOX_MCP_TRANSPORT=sse` and `{ "type": "sse", "url": "http://localhost:8080/sse" }`.
+
+> The HTTP transports have **no authentication** — publish the port on localhost only or put a reverse proxy in front.
 
 ### Any MCP client (Python example)
 
@@ -89,6 +116,9 @@ PROXMOX_MCP_VERIFY_SSL=false
 | `PROXMOX_MCP_TOKEN_SECRET` | ✅* | API token secret UUID (*token auth*) |
 | `PROXMOX_MCP_PASSWORD` | ✅* | Account password (*password auth*) |
 | `PROXMOX_MCP_VERIFY_SSL` | — | Verify TLS cert (default: `false`) |
+| `PROXMOX_MCP_TRANSPORT` | — | `stdio` (default), `streamable-http` or `sse` |
+| `PROXMOX_MCP_HTTP_HOST` | — | HTTP bind host (default: `0.0.0.0`; falls back to `PROXMOX_MCP_SSE_HOST`) |
+| `PROXMOX_MCP_HTTP_PORT` | — | HTTP bind port (default: `8080`; falls back to `PROXMOX_MCP_SSE_PORT`) |
 
 \* Token auth takes priority when both are present.
 
@@ -134,7 +164,7 @@ PROXMOX_MCP_VERIFY_SSL=false
 | Tag | Description |
 |---|---|
 | `latest` | Latest stable build from `main` |
-| `x.y.z` | Pinned release version |
+| `vX.Y.Z` | Pinned release version (current: `v1.3.0`) |
 
 ---
 
