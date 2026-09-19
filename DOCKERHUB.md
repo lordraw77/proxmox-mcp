@@ -1,6 +1,6 @@
 # lordraw/proxmox-mcp
 
-**MCP server for Proxmox VE** — exposes 91 management tools over the [Model Context Protocol](https://modelcontextprotocol.io/) (stdio transport).
+**MCP server for Proxmox VE** — exposes 91 management tools over the [Model Context Protocol](https://modelcontextprotocol.io/) (stdio, Streamable HTTP; legacy SSE kept for compatibility).
 
 Connect any MCP-compatible AI client (Claude Desktop, custom agents, …) to your Proxmox cluster and manage it in natural language.
 

@@ -1,17 +1,18 @@
 services:
 
   # ── MCP server ─────────────────────────────────────────────────────────────
-  # Transport is controlled by MCP_TRANSPORT in .env (stdio | sse).
+  # Transport is controlled by MCP_TRANSPORT in .env (stdio | streamable-http | sse).
   #
   # stdio mode (default):
   #   NOT started by `docker compose up` — spawned on demand by agent.py:
   #     docker compose run --rm mcp-server
   #   The -i flag (stdin open) is required for the stdio JSON-RPC pipe.
   #
-  # SSE mode:
-  #   Set PROXMOX_MCP_TRANSPORT=sse in .env, then:
+  # HTTP mode:
+  #   Set PROXMOX_MCP_TRANSPORT=streamable-http in .env, then:
   #     docker compose up mcp-server
-  #   Server listens on MCP_SSE_HOST:MCP_SSE_PORT (default 0.0.0.0:8080).
+  #   Endpoint: http://<host>:PROXMOX_MCP_HTTP_PORT/mcp (default 0.0.0.0:8080).
+  #   PROXMOX_MCP_TRANSPORT=sse is the legacy transport (endpoint /sse).
   mcp-server:
     build:
       context: .
@@ -20,7 +21,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${PROXMOX_MCP_SSE_PORT:-8080}:${PROXMOX_MCP_SSE_PORT:-8080}"
+      - "${PROXMOX_MCP_HTTP_PORT:-${PROXMOX_MCP_SSE_PORT:-8080}}:${PROXMOX_MCP_HTTP_PORT:-${PROXMOX_MCP_SSE_PORT:-8080}}"
     stdin_open: true
     restart: "no"
 

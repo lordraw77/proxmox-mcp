@@ -2754,19 +2754,49 @@ async def _run_sse(host: str, port: int):
     await uvicorn.Server(config).serve()
 
 
+async def _run_streamable_http(host: str, port: int):
+    import contextlib
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+    import uvicorn
+
+    session_manager = StreamableHTTPSessionManager(app=server)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app):
+        async with session_manager.run():
+            yield
+
+    class _MCPEndpoint:
+        # ASGI app (not a request handler) so /mcp is served without a 307 to /mcp/.
+        async def __call__(self, scope, receive, send):
+            await session_manager.handle_request(scope, receive, send)
+
+    app = Starlette(
+        routes=[Route("/mcp", endpoint=_MCPEndpoint())],
+        lifespan=lifespan,
+    )
+    config = uvicorn.Config(app, host=host, port=port)
+    await uvicorn.Server(config).serve()
+
+
 async def main():
     parser = argparse.ArgumentParser(description="Proxmox MCP Server")
     parser.add_argument(
         "--transport",
-        choices=["stdio", "sse"],
+        choices=["stdio", "streamable-http", "sse"],
         default=os.getenv("PROXMOX_MCP_TRANSPORT", "stdio"),
-        help="Transport type — overrides PROXMOX_MCP_TRANSPORT env var (default: stdio)",
+        help="Transport type — overrides PROXMOX_MCP_TRANSPORT env var (default: stdio). "
+             "'sse' is the legacy HTTP+SSE transport, kept for backward compatibility.",
     )
-    parser.add_argument("--host", default=os.getenv("PROXMOX_MCP_SSE_HOST", "0.0.0.0"), help="SSE bind host")
-    parser.add_argument("--port", type=int, default=int(os.getenv("PROXMOX_MCP_SSE_PORT", "8080")), help="SSE bind port")
+    parser.add_argument("--host", default=os.getenv("PROXMOX_MCP_HTTP_HOST") or os.getenv("PROXMOX_MCP_SSE_HOST", "0.0.0.0"), help="HTTP bind host (streamable-http / sse)")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PROXMOX_MCP_HTTP_PORT") or os.getenv("PROXMOX_MCP_SSE_PORT", "8080")), help="HTTP bind port (streamable-http / sse)")
     args = parser.parse_args()
 
-    if args.transport == "sse":
+    if args.transport == "streamable-http":
+        await _run_streamable_http(args.host, args.port)
+    elif args.transport == "sse":
         await _run_sse(args.host, args.port)
     else:
         await _run_stdio()

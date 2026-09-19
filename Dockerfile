@@ -21,7 +21,7 @@ ARG BUILD_DATE
 ARG VCS_REF
 
 LABEL org.opencontainers.image.title="proxmox-mcp"
-LABEL org.opencontainers.image.description="MCP server exposing Proxmox VE management tools over stdio or HTTP SSE"
+LABEL org.opencontainers.image.description="MCP server exposing Proxmox VE management tools over stdio or Streamable HTTP (legacy SSE also supported)"
 LABEL org.opencontainers.image.vendor="lordraw"
 LABEL org.opencontainers.image.url="https://hub.docker.com/r/lordraw/proxmox-mcp"
 LABEL org.opencontainers.image.source="https://github.com/lordraw77/proxmox-mcp"
@@ -36,11 +36,12 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY server.py util.py ./
 
-# Transport is selected via PROXMOX_MCP_TRANSPORT (stdio | sse, default: stdio).
-# In SSE mode the server listens on PROXMOX_MCP_SSE_HOST:PROXMOX_MCP_SSE_PORT (default 0.0.0.0:8080).
+# Transport is selected via PROXMOX_MCP_TRANSPORT (stdio | streamable-http | sse, default: stdio).
+# In HTTP modes the server listens on PROXMOX_MCP_HTTP_HOST:PROXMOX_MCP_HTTP_PORT (default 0.0.0.0:8080);
+# streamable-http serves /mcp, legacy sse serves /sse. PROXMOX_MCP_SSE_HOST/PORT are still honoured as fallback.
 ENV PROXMOX_MCP_TRANSPORT=stdio \
-    PROXMOX_MCP_SSE_HOST=0.0.0.0 \
-    PROXMOX_MCP_SSE_PORT=8080
+    PROXMOX_MCP_HTTP_HOST=0.0.0.0 \
+    PROXMOX_MCP_HTTP_PORT=8080
 
 EXPOSE 8080
 

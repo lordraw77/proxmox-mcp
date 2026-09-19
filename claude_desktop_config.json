@@ -7,7 +7,12 @@
         "PROXMOX_MCP_TRANSPORT": "stdio"
       }
     },
-    "proxmox-sse": {
+    "proxmox-http": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
+    },
+    "proxmox-sse-legacy": {
+      "type": "sse",
       "url": "http://localhost:8080/sse"
     }
   }

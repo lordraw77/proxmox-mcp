@@ -22,7 +22,7 @@ agent.py  ───────────────────────�
   OpenAI-compatible client                                                   (any LLM model)
       │  tool_calls (JSON)
       ▼
-server.py  (MCP server, stdio transport)
+server.py  (MCP server, stdio / Streamable HTTP / legacy SSE)
   proxmoxer REST client
       │  HTTPS / port 8006
       ▼
@@ -281,6 +281,40 @@ Or with Docker:
 }
 ```
 
+### Network transports (Streamable HTTP, legacy SSE)
+
+The server can also listen over HTTP. Select the transport with `--transport` or `PROXMOX_MCP_TRANSPORT`:
+
+| Transport | Value | Endpoint | Status |
+|-----------|-------|----------|--------|
+| Standard I/O | `stdio` (default) | — | current |
+| Streamable HTTP | `streamable-http` | `/mcp` | current, recommended for remote clients |
+| HTTP + SSE | `sse` | `/sse` (+ `/messages/`) | deprecated in the MCP spec, kept for backward compatibility |
+
+```bash
+# Streamable HTTP on http://0.0.0.0:8080/mcp
+python server.py --transport streamable-http --host 0.0.0.0 --port 8080
+
+# Legacy SSE on http://0.0.0.0:8080/sse
+python server.py --transport sse
+```
+
+Bind address and port come from `PROXMOX_MCP_HTTP_HOST` / `PROXMOX_MCP_HTTP_PORT` (default `0.0.0.0:8080`);
+the old `PROXMOX_MCP_SSE_HOST` / `PROXMOX_MCP_SSE_PORT` are still used as fallback.
+
+Client configuration:
+
+```json
+{
+  "mcpServers": {
+    "proxmox-http": { "type": "http", "url": "http://localhost:8080/mcp" },
+    "proxmox-sse-legacy": { "type": "sse", "url": "http://localhost:8080/sse" }
+  }
+}
+```
+
+> The HTTP transports have no authentication — bind to localhost or put a reverse proxy in front.
+
 ---
 
 ## Available Tools (91 total)
@@ -525,7 +559,7 @@ Or with Docker:
 
 | File | Role |
 |---|---|
-| `server.py` | MCP server — 91 tools over stdio transport |
+| `server.py` | MCP server — 91 tools over stdio, Streamable HTTP or legacy SSE |
 | `llm.py` | Shared provider registry, client factory, agentic loop |
 | `agent.py` | Interactive CLI agent — OpenRouter backend |
 | `agent_ollama.py` | Interactive CLI agent — Ollama backend (local/LAN) |
